@@ -134,6 +134,11 @@ class ParseConvertTopology:
         else:
             sdx_port["mtu"] = 1500
 
+        if "port_name" in interface["metadata"]:
+            sdx_port["short_name"] = interface["metadata"]["port_name"]
+        else:
+            sdx_port["short_name"] = interface["name"]
+
         if "sdx_nni" in interface["metadata"]:
             sdx_port["nni"] = "urn:sdx:link:" + interface["metadata"]["sdx_nni"]
 
@@ -144,6 +149,7 @@ class ParseConvertTopology:
                 "l2vpn-ptp": {"vlan_range": vlan_range},
                 "l2vpn-ptmp":{"vlan_range": vlan_range}
                 }
+        sdx_port["label_range"] = ["1-100"]
 
         return sdx_port
 
@@ -183,7 +189,7 @@ class ParseConvertTopology:
 
         sdx_node["id"] = f"urn:sdx:node:{self.oxp_url}:%s" % sdx_node["name"]
 
-        sdx_node["location"] = {"address": "", "latitude": "", "longitude": ""}
+        sdx_node["location"] = {"address": "", "latitude": "", "longitude": "", "iso3166_2_lvl4": ""}
         if "address" in kytos_node["metadata"]:
             sdx_node["location"]["address"] = kytos_node["metadata"]["address"]
         if "lat" in kytos_node["metadata"]:
@@ -192,6 +198,8 @@ class ParseConvertTopology:
         if "lng" in kytos_node["metadata"]:
             sdx_node["location"]["longitude"] = float(
                     kytos_node["metadata"]["lng"])
+        if "iso3166_2_lvl4" in kytos_node["metadata"]:
+            sdx_node["location"]["iso3166_2_lvl4"] = kytos_node["metadata"]["iso3166_2_lvl4"]
 
         sdx_node["ports"] = self.get_ports(
                 sdx_node["name"], kytos_node["interfaces"])
@@ -253,22 +261,24 @@ class ParseConvertTopology:
                 {
                     "id": self.get_sdx_port_urn(switch_a, interface_a),
                     "name": kytos_link["endpoint_a"]["name"],
-                    "node": "urn:sdx:node:"+sdx_link["name"],
+                    "node": f"urn:sdx:node:{self.oxp_url}:{node_swa}",
                     "type": "Other",
                     "status": "up",
                     "state": "disabled",
                     "services": services,
+                    "label_range": ["1-100"],
                     "nni": "sdx_nni:",
                     "mtu": 0
                 },
                 {
                     "id": self.get_sdx_port_urn(switch_b, interface_b),
                     "name": kytos_link["endpoint_b"]["name"],
-                    "node": "urn:sdx:node:"+sdx_link["name"],
+                    "node": f"urn:sdx:node:{self.oxp_url}:{node_swb}",
                     "type": "Other",
                     "status": "up",
                     "state": "disabled",
                     "services": services,
+                    "label_range": ["1-100"],
                     "nni": "sdx_nni:",
                     "mtu": 0
                 },
@@ -318,58 +328,73 @@ class ParseConvertTopology:
         sdx_links = []
         for kytos_node in self.get_kytos_nodes():
             for kytos_interface in kytos_node["interfaces"].values():
-                if "nni" in kytos_interface["metadata"]:
-                    if self.oxp_url not in kytos_interface["metadata"]["nni"]:
+                sdx_nni = kytos_interface["metadata"].get("sdx_nni")
+                if not sdx_nni or  self.oxp_url in sdx_nni:
+                    continue
+                sdx_link = {}
+                other_url = sdx_nni.split(":")[0]
+                other_node = sdx_nni.split(":")[:2][-1]
+                other_port = sdx_nni.split(":")[-1]
 
-                        sdx_link = {}
+                sdx_link[
+                    "name"
+                ] = "nni:" + "-".join(sorted([self.oxp_url, other_url]))
 
-                        if "link_name" in kytos_interface["metadata"]:
-                            sdx_link["name"] = kytos_interface["metadata"][
-                                    "link_name"]
-                        else:
-                            sdx_link[
-                                "name"
-                            ] = f"NO_NAME_{secrets.randbelow(100000)}"
+                sdx_link[
+                    "id"
+                ] = f"urn:sdx:link:{sdx_link['name']}"
 
-                        sdx_link[
-                            "id"
-                        ] = f"urn:sdx:link:{self.oxp_url}:{sdx_link['name']}"
+                if "node_name" in kytos_node["metadata"]:
+                    kytos_node["name"] = kytos_node["metadata"][
+                        "node_name"
+                    ]
+                else:
+                    kytos_node["name"] = kytos_node["data_path"]
 
-                        if "node_name" in kytos_node["metadata"]:
-                            kytos_node["name"] = kytos_node["metadata"][
-                                "node_name"
-                            ]
-                        else:
-                            kytos_node["name"] = kytos_node["data_path"]
+                port_id = self.get_port_urn(
+                    kytos_node["id"], kytos_interface["port_number"]
+                )
 
-                        port_id = self.get_port_urn(
-                            kytos_node["id"], kytos_interface["port_number"]
-                        )
+                sdx_link["ports"] = [
+                    {
+                        "id": port_id,
+                        "name": kytos_interface["name"],
+                        "node": f"urn:sdx:node:{self.oxp_url}:{kytos_node['name']}",
+                        "type": "Other",
+                        "status": "up",
+                        "state": "disabled",
+                        "label_range": ["1-100"],
+                    },
+                    {
+                        "id": "urn:sdx:port:" + sdx_nni,
+                        "name": f"{other_node}:{other_port}",
+                        "node": f"urn:sdx:node:{other_url}:{other_node}",
+                        "type": "Other",
+                        "status": "up",
+                        "state": "disabled",
+                        "label_range": ["1-100"],
+                    },
+                ]
 
-                        sdx_link["ports"] = [
-                            port_id,
-                            kytos_interface["metadata"]["nni"],
-                        ]
+                sdx_link["type"] = "inter"
+                sdx_link["bandwidth"] = self.get_link_port_speed(
+                    str(kytos_interface["speed"])
+                )
+                sdx_link["status"] = (
+                    "up" if kytos_interface["active"] else "down"
+                )
+                sdx_link["state"] = (
+                    "enabled"
+                    if kytos_interface["enabled"]
+                    else "disabled"
+                )
 
-                        sdx_link["type"] = "inter"
-                        sdx_link["bandwidth"] = self.get_link_port_speed(
-                            str(kytos_interface["speed"])
-                        )
-                        sdx_link["status"] = (
-                            "up" if kytos_interface["active"] else "down"
-                        )
-                        sdx_link["state"] = (
-                            "enabled"
-                            if kytos_interface["enabled"]
-                            else "disabled"
-                        )
-
-                        sdx_link["availability"] = 100
-                        sdx_link["residual_bandwidth"] = 100
-                        sdx_link["packet_loss"] = 0
-                        sdx_link["latency"] = 2
-                        sdx_links.append(sdx_link)
-                        del sdx_link
+                sdx_link["availability"] = 100
+                sdx_link["residual_bandwidth"] = 100
+                sdx_link["packet_loss"] = 0
+                sdx_link["latency"] = 2
+                sdx_links.append(sdx_link)
+                del sdx_link
         return sdx_links
 
     def parse_convert_topology(self):
