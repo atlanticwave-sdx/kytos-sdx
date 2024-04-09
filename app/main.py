@@ -45,6 +45,10 @@ class Main(KytosNApp):  # pylint: disable=R0904
         oxpo_urls_str = os.environ.get("OXPO_URLS")
         self.oxpo_urls_list = oxpo_urls_str.split(",")
         self.oxpo_url = oxpo_urls_str.split(",")[OXPO_ID]
+        # mapping from IDs used by kytos and SDX
+        # ex: urn:sdx:port:sax.net:Sax01:40 <--> cc:00:00:00:00:00:00:01:40
+        self.kytos2sdx = {}
+        self.sdx2kytos = {}
 
     def execute(self):
         """Run after the setup method execution.
@@ -165,6 +169,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 self.sdx_topology = topology_mock.topology_mock()
             evaluate_topology = self.validate_sdx_topology()
             if evaluate_topology["status_code"] == 200:
+                self.kytos2sdx = topology_updated.get("kytos2sdx", {})
+                self.sdx2kytos = topology_updated.get("sdx2kytos", {})
                 result = self.post_sdx_lc(event_type)
                 return result
             with shelve.open("events_shelve") as log_events:
@@ -339,3 +345,63 @@ class Main(KytosNApp):  # pylint: disable=R0904
             events = open_shelve['events']
         open_shelve.close()
         return JSONResponse({"events": events})
+
+    @rest("v1/l2vpn_ptp", methods=["POST"])
+    def create_l2vpn_ptp(self, request: Request) -> JSONResponse:
+        """ REST to create L2VPN ptp connection."""
+        content = get_json_or_400(request, self.controller.loop)
+
+        evc_dict = {
+            "name": None,
+            "uni_a": {},
+            "uni_z": {},
+            "dynamic_backup_path": True,
+        }
+
+        for attr in evc_dict:
+            if attr not in content:
+                msg = f"missing attribute {attr}"
+                log.warn(f"EVC creation failed: {msg}. request={content}")
+                return JSONResponse({"result": msg}, 400)
+            if "uni_" in attr:
+                sdx_id = content[attr].get("port_id")
+                kytos_id = self.sdx2kytos.get(sdx_id)
+                if not sdx_id or not kytos_id:
+                    msg = f"unknown value for {attr}.port_id ({sdx_id})"
+                    log.warn(f"EVC creation failed: {msg}. request={content}")
+                    return JSONResponse({"result": msg}, 400)
+                evc_dict[attr]["interface_id"] = kytos_id
+                if "tag" in content[attr]:
+                    evc_dict[attr]["tag"] = content[attr]["tag"]
+            else:
+                evc_dict[attr] = content[attr]
+
+        try:
+            kytos_evc_url = os.environ.get(
+                "KYTOS_EVC_URL", settings.KYTOS_EVC_URL
+            )
+            response = requests.post(
+                    kytos_evc_url,
+                    json=evc_dict,
+                    timeout=30)
+            assert response.status_code == 201, response.text
+        except requests.exceptions.Timeout as exc:
+            log.warn("EVC creation failed timout on Kytos: %s", exc)
+            raise HTTPException(
+                    400,
+                    detail=f"Request to Kytos timeout: {exc}"
+                ) from exc
+        except AssertionError as exc:
+            log.warn("EVC creation failed on Kytos: %s", exc)
+            raise HTTPException(
+                    400,
+                    detail=f"Request to Kytos failed: {exc}"
+                ) from exc
+        except Exception as exc:
+            log.warn("EVC creation failed on Kytos request: %s", exc)
+            raise HTTPException(
+                    400,
+                    detail=f"Request to Kytos failed: {exc}"
+                ) from exc
+
+        return JSONResponse(response.json(), 200)
