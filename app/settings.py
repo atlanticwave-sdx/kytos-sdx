@@ -32,6 +32,3 @@ OPERATIONAL_EVENTS = [
         # '.*.switch.interface.link_up',
         # '.*.switch.(new|reconnected)'
         ]
-
-# Kytos mef_eline endpoint for creating L2VPN PTP
-KYTOS_EVC_URL = "http://127.0.0.1:8181/api/kytos/mef_eline/v2/evc/"
