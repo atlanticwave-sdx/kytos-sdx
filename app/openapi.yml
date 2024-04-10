@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  version: '1.0.0'
+  title: Kytos SDX integration
+  description: Kytos NApp for integrate AtlanticWave SDX2.0 Local controller with Kytos OXPO
+servers:
+  - url: /api/kytos/kytos_sdx
+paths:
+  /v1/l2vpn_ptp/:
+    get:
+      summary: List all L2VPN PTP stored.
+      description: List all L2VPN PTP stored.
+      operationId: list_l2vpn_ptp
+      parameters:
+        - name: archived
+          in: query
+          schema:
+            type: string
+          description: "Filter for archived value, if not null. It's false by default"
+          required: false
+        - name: metadata
+          in: query
+          schema:
+            oneOf:
+              - type: string
+              - type: integer
+              - type: boolean
+          description: Filter for metadata values with format metadata.key=value, e.g. "metadata.required=false"
+          required: false
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                items:
+                  $ref: '#/components/schemas/EVC'
+
+    post:
+      summary: Creates a new L2VPN PTP
+      operationId: create_l2vpn_ptp
+      requestBody:
+        description: Creates a new L2VPN PTP based on the endpoints and
+          constraints given.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EVC'
+      responses:
+        '201':
+          description: EVC created. The EVC ID is being returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evc_id: # the unique EVC id
+                    type: string
+        '400':
+          description: Request do not have a valid JSON or same necessary
+            interface does not yet exists.
+        '409':
+          description: Not Acceptable. This evc already exists.
+        '415':
+          description: The request body mimetype is not application/json.
+
+
+components:
+  schemas:
+    EVC: # Can be referenced via '#/components/schemas/EVC'
+      type: object
+      required:
+        - name
+        - uni_a
+        - uni_z
+      properties:
+        name:
+          type: string
+        uni_a:
+          $ref: '#/components/schemas/Endpoint'
+        uni_z:
+          $ref: '#/components/schemas/Endpoint'
+        dynamic_backup_path:
+          type: boolean
+        metadata:
+          type: object
+
+    Endpoint: # Can be referenced via '#/components/schemas/Endpoint'
+      type: object
+      required:
+        - port_id
+      properties:
+        port_id:
+          type: string
+          minLength: 25
+          maxLength: 30
+          pattern: '^((urn:sdx:port:)[A-Za-z0-9_.\:/-]*)$'
+        tag:
+          type: integer
+
+  /v1/l2vpn_ptp/{evc_id}:
+    get:
+      summary: Get details of a L2VPN PTP EVC
+      description: Get the details of a single EVC
+      operationId: get_l2vpn_ptp
+      parameters:
+        - name: evc_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EVC'
+        '400':
+          description: Circuit id not found.
+
+    patch:
+      summary: Update a L2VPN PTP EVC
+      description: Update a EVC based on payload.
+      operationId: update_l2vpn_ptp
+      parameters:
+        - name: evc_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Update a circuit based on the evc_id and payload given
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EVC'
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: EVC id not found.
+        '400':
+          description: Bad request.
+
+    delete:
+      summary: Delete a L2VPN PTP EVC
+      description: Delete an EVC.
+      operationId: delete_l2vpn_ptp
+      parameters:
+        - name: evc_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
