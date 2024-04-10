@@ -17,6 +17,9 @@ class ParseConvertTopology:
         self.oxp_name = args['oxp_name']
         self.oxp_url = args['oxp_url']
         self.oxp_urls_list = args['oxp_urls_list']
+        # mapping from Kytos to SDX and vice-versa
+        self.kytos2sdx = {}
+        self.sdx2kytos = {}
 
     def get_kytos_nodes(self) -> dict:
         """ return parse_args["topology"]["switches"] values """
@@ -161,6 +164,8 @@ class ParseConvertTopology:
             port_no = interface["port_number"]
             if port_no != 4294967294:
                 ports.append(self.get_port(sdx_node_name, interface))
+                self.kytos2sdx[interface["id"]] = ports[-1]["id"]
+                self.sdx2kytos[ports[-1]["id"]] = interface["id"]
 
         return ports
 
@@ -409,4 +414,6 @@ class ParseConvertTopology:
         topology["links"] = self.get_sdx_links()
         topology["links"] += self.create_inter_oxp_link_entries()
         topology["services"] = ["l2vpn-ptp"]
+        topology["kytos2sdx"] = self.kytos2sdx
+        topology["sdx2kytos"] = self.sdx2kytos
         return topology
