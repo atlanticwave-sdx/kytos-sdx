@@ -37,14 +37,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
         self.sdx_topology = {}  # pylint: disable=W0201
         self.shelve_loaded = False  # pylint: disable=W0201
         self.version_control = False  # pylint: disable=W0201
-        OXPO_ID = int(os.environ.get("OXPO_ID"))
-        sdx_lc_urls_str = os.environ.get("SDXLC_URLS")
-        self.sdxlc_url = sdx_lc_urls_str.split(",")[OXPO_ID]
-        oxpo_names_str = os.environ.get("OXPO_NAMES")
-        self.oxpo_name = oxpo_names_str.split(",")[OXPO_ID]
-        oxpo_urls_str = os.environ.get("OXPO_URLS")
-        self.oxpo_urls_list = oxpo_urls_str.split(",")
-        self.oxpo_url = oxpo_urls_str.split(",")[OXPO_ID]
+        self.sdxlc_url = os.environ.get("SDXLC_URL")
+        self.oxpo_name = os.environ.get("OXPO_NAME")
+        self.oxpo_url = os.environ.get("OXPO_URL")
         # mapping from IDs used by kytos and SDX
         # ex: urn:sdx:port:sax.net:Sax01:40 <--> cc:00:00:00:00:00:00:01:40
         self.kytos2sdx = {}
@@ -138,7 +133,6 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     model_version=self.dict_shelve['model_version'],
                     oxp_name=self.dict_shelve['name'],
                     oxp_url=self.dict_shelve['url'],
-                    oxp_urls_list = self.oxpo_urls_list,
                 ).parse_convert_topology()
                 return {"result": topology_converted, "status_code": 200}
             return {"result": topology_mock.topology_mock(),
