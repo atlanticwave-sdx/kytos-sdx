@@ -95,6 +95,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
         """ return 200 if validated topology following the SDX data model"""
         try:
             sdx_topology_validator = os.environ.get("SDXTOPOLOGY_VALIDATOR")
+            if sdx_topology_validator == "disabled":
+                return {"result": "disabled", "status_code": 200}
             response = requests.post(
                     sdx_topology_validator,
                     json=self.sdx_topology,
