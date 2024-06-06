@@ -3,15 +3,18 @@
 Run "python3 setup.py --help-commands" to list all available commands and their
 descriptions.
 """
+
+import json
 import os
 import shutil
 import sys
 from abc import abstractmethod
 from pathlib import Path
-from subprocess import call, check_call
+from subprocess import CalledProcessError, call, check_call
 
 from setuptools import Command, setup
 from setuptools.command.develop import develop
+from setuptools.command.egg_info import egg_info
 from setuptools.command.install import install
 
 if "bdist_wheel" in sys.argv:
@@ -20,7 +23,7 @@ if "bdist_wheel" in sys.argv:
 # Paths setup with virtualenv detection
 BASE_ENV = Path(os.environ.get("VIRTUAL_ENV", "/"))
 
-NAPP_NAME = "sdx_topology"
+NAPP_NAME = "sdx"
 NAPP_VERSION = "0.1"
 
 # Kytos var folder
@@ -32,7 +35,7 @@ INSTALLED_PATH = VAR_PATH / "napps" / ".installed"
 CURRENT_DIR = Path(".").resolve()
 
 # NApps enabled by default
-CORE_NAPPS = []
+CORE_NAPPS = ["topology"]
 
 
 class SimpleCommand(Command):
@@ -54,6 +57,29 @@ class SimpleCommand(Command):
         """Post-process options."""
 
 
+# pylint: disable=attribute-defined-outside-init, abstract-method
+class TestCommand(Command):
+    """Test tags decorators."""
+
+    user_options = [
+        ("k=", None, "Specify a pytest -k expression."),
+    ]
+
+    def get_args(self):
+        """Return args to be used in test command."""
+        if self.k:
+            return f"-k '{self.k}'"
+        return ""
+
+    def initialize_options(self):
+        """Set default size and type args."""
+        self.k = ""
+
+    def finalize_options(self):
+        """Post-process."""
+        pass
+
+
 class Cleaner(SimpleCommand):
     """Custom clean command to tidy up the project root."""
 
@@ -66,15 +92,36 @@ class Cleaner(SimpleCommand):
         call("make -C docs/ clean", shell=True)
 
 
-class TestCoverage(SimpleCommand):
-    """Display test coverage."""
+class Test(TestCommand):
+    """Run all tests."""
 
-    description = "run unit tests and display code coverage"
+    description = "run tests and display results"
 
     def run(self):
-        """Run unittest quietly and display coverage report."""
-        cmd = "coverage3 run -m unittest && coverage3 report"
-        call(cmd, shell=True)
+        """Run tests."""
+        cmd = f"python3 -m pytest tests/ {self.get_args()}"
+        try:
+            check_call(cmd, shell=True)
+        except CalledProcessError as exc:
+            print(exc)
+            print("Unit tests failed. Fix the errors above and try again.")
+            sys.exit(-1)
+
+
+class TestCoverage(Test):
+    """Display test coverage."""
+
+    description = "run tests and display code coverage"
+
+    def run(self):
+        """Run tests quietly and display coverage report."""
+        cmd = f"python3 -m pytest --cov=. tests/ {self.get_args()}"
+        try:
+            check_call(cmd, shell=True)
+        except CalledProcessError as exc:
+            print(exc)
+            print("Coverage tests failed. Fix the errors above and try again.")
+            sys.exit(-1)
 
 
 class Linter(SimpleCommand):
@@ -85,21 +132,10 @@ class Linter(SimpleCommand):
     def run(self):
         """Run yala."""
         print("Yala is running. It may take several seconds...")
-        check_call("yala *.py", shell=True)
+        check_call("yala *.py controllers db tests", shell=True)
 
 
-class CITest(SimpleCommand):
-    """Run all CI tests."""
-
-    description = "run all CI tests: unit and doc tests, linter"
-
-    def run(self):
-        """Run unit tests with coverage, doc tests and linter."""
-        cmds = ["python3 setup.py " + cmd for cmd in ("coverage", "lint")]
-        cmd = " && ".join(cmds)
-        check_call(cmd, shell=True)
-
-
+# pylint: disable=too-few-public-methods
 class KytosInstall:
     """Common code for all install types."""
 
@@ -115,32 +151,37 @@ class KytosInstall:
 
 
 class InstallMode(install):
-    """Class used to overwrite the default installation using setuptools."""
+    """Create files in var/lib/kytos."""
+
+    description = 'To install NApps, use kytos-utils. Devs, see "develop".'
 
     def run(self):
-        """Install the package in install mode.
+        """Direct users to use kytos-utils to install NApps."""
+        print(self.description)
 
-        super().run() does not install dependencies when running
-        ``python setup.py install`` (pypa/setuptools#456).
-        """
-        print(f"Installing NApp kytos/sdx...")
-        install_path = Path(INSTALLED_PATH)
 
-        if not install_path.exists():
-            # Create '.installed' dir if installing the first NApp in Kytos
-            install_path.mkdir(parents=True, exist_ok=True)
-        elif (install_path / "kytos").exists():
-            # It cleans an old installation
-            shutil.rmtree(install_path / "kytos")
+class EggInfo(egg_info):
+    """Prepare files to be packed."""
 
-        # The path where the NApp will be installed
-        napp_path = install_path / "kytos" / NAPP_NAME
+    def run(self):
+        """Build css."""
+        self._install_deps_wheels()
+        super().run()
 
-        src = CURRENT_DIR
-        shutil.copytree(src, napp_path)
-        (napp_path.parent / "__init__.py").touch()
-        KytosInstall.enable_core_napps()
-        print("NApp installed.")
+    @staticmethod
+    def _install_deps_wheels():
+        """Python wheels are much faster (no compiling)."""
+        print("Installing dependencies...")
+        check_call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                "requirements/run.txt",
+            ]
+        )
 
 
 class DevelopMode(develop):
@@ -183,7 +224,7 @@ class DevelopMode(develop):
     def _create_file_symlinks():
         """Symlink to required files."""
         src = ENABLED_PATH / "__init__.py"
-        dst = CURRENT_DIR / "kytos" / "__init__.py"
+        dst = CURRENT_DIR / "napps" / "__init__.py"
         symlink_if_different(src, dst)
 
 
@@ -200,37 +241,43 @@ def symlink_if_different(path, target):
         path.symlink_to(target)
 
 
+def read_version_from_json():
+    """Read the NApp version from NApp kytos.json file."""
+    file = Path("kytos.json")
+    metadata = json.loads(file.read_text(encoding="utf8"))
+    return metadata["version"]
+
+
+def read_requirements(path="requirements/run.txt"):
+    """Read requirements file and return a list."""
+    with open(path, "r", encoding="utf8") as file:
+        return [line.strip() for line in file.readlines() if not line.startswith("#")]
+
+
 setup(
     name=f"kytos_{NAPP_NAME}",
-    version=NAPP_VERSION,
-    description="Core NApps developed by the Kytos Team",
-    url=f"http://github.com/kytos/{NAPP_NAME}",
-    author="Kytos Team",
-    author_email="of-ng-dev@ncc.unesp.br",
+    version=read_version_from_json(),
+    description="This NApp implements the conversion needed for SDX",
+    url="http://github.com/atlanticwave-sdx/kytos-sdx-topology",
+    author="AmLight Team",
+    author_email="dev@amlight.net",
     license="MIT",
-    install_requires=["setuptools >= 36.0.1"],
-    extras_require={
-        "dev": [
-            "coverage",
-            "pip-tools",
-            "yala",
-            "tox",
-        ],
-    },
+    install_requires=read_requirements() + ["importlib_metadata"],
     packages=[],
     cmdclass={
         "clean": Cleaner,
-        "ci": CITest,
         "coverage": TestCoverage,
         "develop": DevelopMode,
         "install": InstallMode,
         "lint": Linter,
+        "egg_info": EggInfo,
+        "test": Test,
     },
     zip_safe=False,
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX :: Linux",
-        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.11",
         "Topic :: System :: Networking",
     ],
 )
