@@ -76,9 +76,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
     def post_sdx_lc(self, event_type=None):
         """ return the status from post sdx topology to sdx lc"""
-        sdxlc_url = self.sdxlc_url
+        # if not SDXLC is configured we ignore this part
+        if not self.sdxlc_url:
+            return {"result": self.sdx_topology, "status_code": 200}
+
         post_topology = requests.post(
-                sdxlc_url,
+                self.sdxlc_url,
                 timeout=60,
                 json=self.sdx_topology)
         if post_topology.status_code == 200:
