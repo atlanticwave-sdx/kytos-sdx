@@ -68,7 +68,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
     @staticmethod
     def get_kytos_topology():
         """retrieve topology from API"""
-        kytos_topology_url = os.environ.get("KYTOS_TOPOLOGY")
+        kytos_topology_url = settings.KYTOS_TOPOLOGY_URL
         kytos_topology = requests.get(
                 kytos_topology_url, timeout=10).json()
         result = kytos_topology["topology"]
