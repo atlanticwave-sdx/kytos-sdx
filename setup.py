@@ -23,7 +23,7 @@ if "bdist_wheel" in sys.argv:
 # Paths setup with virtualenv detection
 BASE_ENV = Path(os.environ.get("VIRTUAL_ENV", "/"))
 
-NAPP_NAME = "sdx"
+NAPP_NAME = "sdx_topology"
 NAPP_VERSION = "0.1"
 
 # Kytos var folder
