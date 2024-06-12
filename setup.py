@@ -3,7 +3,6 @@
 Run "python3 setup.py --help-commands" to list all available commands and their
 descriptions.
 """
-
 import json
 import os
 import shutil
@@ -14,7 +13,6 @@ from subprocess import CalledProcessError, call, check_call
 
 from setuptools import Command, setup
 from setuptools.command.develop import develop
-from setuptools.command.egg_info import egg_info
 from setuptools.command.install import install
 
 if "bdist_wheel" in sys.argv:
@@ -160,30 +158,6 @@ class InstallMode(install):
         print(self.description)
 
 
-class EggInfo(egg_info):
-    """Prepare files to be packed."""
-
-    def run(self):
-        """Build css."""
-        self._install_deps_wheels()
-        super().run()
-
-    @staticmethod
-    def _install_deps_wheels():
-        """Python wheels are much faster (no compiling)."""
-        print("Installing dependencies...")
-        check_call(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "-r",
-                "requirements/run.txt",
-            ]
-        )
-
-
 class DevelopMode(develop):
     """Recommended setup for kytos-napps developers.
 
@@ -200,7 +174,6 @@ class DevelopMode(develop):
             shutil.rmtree(str(ENABLED_PATH), ignore_errors=True)
         else:
             self._create_folder_symlinks()
-            # self._create_file_symlinks()
             KytosInstall.enable_core_napps()
 
     @staticmethod
@@ -219,13 +192,6 @@ class DevelopMode(develop):
         (ENABLED_PATH / "kytos").mkdir(parents=True, exist_ok=True)
         dst = ENABLED_PATH / Path("kytos", NAPP_NAME)
         symlink_if_different(dst, src)
-
-    @staticmethod
-    def _create_file_symlinks():
-        """Symlink to required files."""
-        src = ENABLED_PATH / "__init__.py"
-        dst = CURRENT_DIR / "napps" / "__init__.py"
-        symlink_if_different(src, dst)
 
 
 def symlink_if_different(path, target):
@@ -262,7 +228,7 @@ setup(
     author="AmLight Team",
     author_email="dev@amlight.net",
     license="MIT",
-    install_requires=read_requirements() + ["importlib_metadata"],
+    install_requires=read_requirements(),
     packages=[],
     cmdclass={
         "clean": Cleaner,
@@ -270,14 +236,13 @@ setup(
         "develop": DevelopMode,
         "install": InstallMode,
         "lint": Linter,
-        "egg_info": EggInfo,
         "test": Test,
     },
     zip_safe=False,
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX :: Linux",
-        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3",
         "Topic :: System :: Networking",
     ],
 )

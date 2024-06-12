@@ -1,7 +1,7 @@
 {
   "author": "AmLight",
-  "username": "amlight",
-  "name": "sdx",
+  "username": "kytos",
+  "name": "sdx_topology",
   "description": "Amlight SDX API",
   "version": "2.0",
   "napp_dependencies": ["kytos/topology"],
