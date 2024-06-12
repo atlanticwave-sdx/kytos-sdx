@@ -185,7 +185,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         return {"result": "No SDX Topology loaded", "status_code": 401}
 
     @listen_to(
-            "kytos/topology.link_*",
+            "kytos/topology.link_.*",
             "kytos/topology.switch.*",
             pool="dynamic_single")
     def listen_event(self, event=None):
