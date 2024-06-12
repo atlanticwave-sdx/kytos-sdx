@@ -34,9 +34,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
         self.sdx_topology = {}  # pylint: disable=W0201
         self.shelve_loaded = False  # pylint: disable=W0201
         self.version_control = False  # pylint: disable=W0201
-        self.sdxlc_url = os.environ.get("SDXLC_URL")
-        self.oxpo_name = os.environ.get("OXPO_NAME")
-        self.oxpo_url = os.environ.get("OXPO_URL")
+        self.sdxlc_url = os.environ.get("SDXLC_URL", "")
+        self.oxpo_name = os.environ.get("OXPO_NAME", "")
+        self.oxpo_url = os.environ.get("OXPO_URL", "")
         # mapping from IDs used by kytos and SDX
         # ex: urn:sdx:port:sax.net:Sax01:40 <--> cc:00:00:00:00:00:00:01:40
         self.kytos2sdx = {}
