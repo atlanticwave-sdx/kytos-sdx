@@ -15,9 +15,6 @@ from kytos.core.helpers import listen_to
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  content_type_json_or_415, get_json_or_400)
 
-HSH = "##########"
-URN = "urn:sdx:"
-
 
 class Main(KytosNApp):  # pylint: disable=R0904
     """Main class of amlight/sdx NApp.
@@ -227,7 +224,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 if 'id' not in open_shelve.keys() or \
                         'name' not in open_shelve.keys() or \
                         'version' not in open_shelve.keys():
-                    open_shelve['id'] = URN+"topology:"+self.oxpo_url
+                    open_shelve['id'] = "urn:sdx:topology:"+self.oxpo_url
                     open_shelve['name'] = self.oxpo_name
                     open_shelve['url'] = self.oxpo_url
                     open_shelve['version'] = 0
@@ -272,56 +269,6 @@ class Main(KytosNApp):  # pylint: disable=R0904
                         log_events['events'] = shelve_events
                         log_events.close()
         return JSONResponse(dict_shelve)
-
-    # rest api tests
-    @rest("v1/validate_sdx_topology", methods=["POST"])
-    def get_validate_sdx_topology(self, request: Request) -> JSONResponse:
-        """ REST to return the validated sdx topology status"""
-        # pylint: disable=W0201
-        content = get_json_or_400(request, self.controller.loop)
-        self.sdx_topology = content.get("sdx_topology")
-        if self.sdx_topology is None:
-            self.sdx_topology = {}
-        response = self.validate_sdx_topology()
-        result = response["result"]
-        status_code = response["status_code"]
-        return JSONResponse(result, status_code)
-
-    @rest("v1/convert_topology/{event_type}/{event_timestamp}")
-    def get_converted_topology(self, request: Request) -> JSONResponse:
-        """ REST to return the converted sdx topology"""
-        event_type = request.path_params["event_type"]
-        event_timestamp = request.path_params["event_timestamp"]
-        response = self.convert_topology(event_type, event_timestamp)
-        result = response["result"]
-        status_code = response["status_code"]
-        return JSONResponse(result, status_code)
-
-    @rest("v1/post_sdx_topology/{event_type}/{event_timestamp}")
-    def get_sdx_topology(self, request: Request) -> JSONResponse:
-        """ REST to return the sdx topology loaded"""
-        event_type = request.path_params["event_type"]
-        event_timestamp = request.path_params["event_timestamp"]
-        response = self.post_sdx_topology(event_type, event_timestamp)
-        result = response["result"]
-        status_code = response["status_code"]
-        return JSONResponse(result, status_code)
-
-    @rest("v1/listen_event", methods=["POST"])
-    def get_listen_event(self, request: Request) -> JSONResponse:
-        """consume call listen Event"""
-        try:
-            result = get_json_or_400(request, self.controller.loop)
-            name = result.get("name")
-            content = result.get("content")
-            event = KytosEvent(
-                    name=name, content=content)
-            # self.controller.buffers.app.put(event)
-            event_result = self.listen_event(event)
-            return JSONResponse(event_result)
-        except requests.exceptions.HTTPError as http_error:
-            raise SystemExit(
-                    http_error, detail="listen topology fails") from http_error
 
     @rest("v1/shelve/topology", methods=["GET"])
     def get_shelve_topology(self, _request: Request) -> JSONResponse:
