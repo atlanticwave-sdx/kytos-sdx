@@ -6,7 +6,7 @@ import shelve
 import requests
 from napps.kytos.sdx_topology.convert_topology import ParseConvertTopology \
           # pylint: disable=E0401
-from napps.kytos.sdx_topology import settings, utils, topology_mock \
+from napps.kytos.sdx_topology import settings, utils \
         # pylint: disable=E0401
 
 from kytos.core import KytosNApp, log, rest
@@ -126,8 +126,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 elif event_type == "operational":
                     timestamp = event_timestamp
                 else:
-                    return {"result": topology_mock.topology_mock(),
-                            "status_code": 401}
+                    return {"result": {}, "status_code": 401}
                 topology_converted = ParseConvertTopology(
                     topology=self.get_kytos_topology(),
                     version=version,
@@ -137,8 +136,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     oxp_url=self.dict_shelve['url'],
                 ).parse_convert_topology()
                 return {"result": topology_converted, "status_code": 200}
-            return {"result": topology_mock.topology_mock(),
-                    "status_code": 401}
+            return {"result": {}, "status_code": 401}
         except Exception as err:  # pylint: disable=W0703
             log.info("validation Error, status code 401:", err)
             return {"result": "Validation Error", "status_code": 401}
@@ -162,7 +160,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                         "links": topology_updated["links"],
                         }
             else:
-                self.sdx_topology = topology_mock.topology_mock()
+                self.sdx_topology = {}
             evaluate_topology = self.validate_sdx_topology()
             if evaluate_topology["status_code"] == 200:
                 self.kytos2sdx = topology_updated.get("kytos2sdx", {})
@@ -283,7 +281,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         content = get_json_or_400(request, self.controller.loop)
         self.sdx_topology = content.get("sdx_topology")
         if self.sdx_topology is None:
-            self.sdx_topology = topology_mock.topology_mock()
+            self.sdx_topology = {}
         response = self.validate_sdx_topology()
         result = response["result"]
         status_code = response["status_code"]
