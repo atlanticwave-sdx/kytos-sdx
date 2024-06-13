@@ -4,28 +4,19 @@ info:
   title: Kytos SDX integration
   description: Kytos NApp for integrate AtlanticWave SDX2.0 Local controller with Kytos OXPO
 servers:
-  - url: /api/kytos/kytos_sdx
+  - url: /api/kytos/sdx_topology
 paths:
-  /v1/l2vpn_ptp/:
+  /v1/l2vpn/:
     get:
-      summary: List all L2VPN PTP stored.
-      description: List all L2VPN PTP stored.
-      operationId: list_l2vpn_ptp
+      summary: List/Retrieve multiple SDX L2VPNs
+      description: List all SDX L2VPN stored
+      operationId: list_l2vpn
       parameters:
         - name: archived
           in: query
           schema:
             type: string
           description: "Filter for archived value, if not null. It's false by default"
-          required: false
-        - name: metadata
-          in: query
-          schema:
-            oneOf:
-              - type: string
-              - type: integer
-              - type: boolean
-          description: Filter for metadata values with format metadata.key=value, e.g. "metadata.required=false"
           required: false
       responses:
         '200':
@@ -35,7 +26,7 @@ paths:
               schema:
                 type: object
                 items:
-                  $ref: '#/components/schemas/EVC'
+                  $ref: '#/components/schemas/L2VPN'
 
     post:
       summary: Creates a new L2VPN PTP
@@ -47,66 +38,67 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EVC'
+              $ref: '#/components/schemas/NewL2VPN'
       responses:
         '201':
-          description: EVC created. The EVC ID is being returned.
+          description: L2VPN Service Created
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  evc_id: # the unique EVC id
+                  service_id:
                     type: string
         '400':
-          description: Request do not have a valid JSON or same necessary
-            interface does not yet exists.
+          description: Request does not have a valid JSON or body is incomplete/incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not Authorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Request not compatible (For instance, when a L2VPN P2MP is requested but only L2VPN P2P is supported)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: L2VPN Service ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '409':
-          description: Not Acceptable. This evc already exists.
-        '415':
-          description: The request body mimetype is not application/json.
+          description: L2VPN Service already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Can't fulfill the strict QoS requirements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '411':
+          description: Scheduling not possible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
-
-components:
-  schemas:
-    EVC: # Can be referenced via '#/components/schemas/EVC'
-      type: object
-      required:
-        - name
-        - uni_a
-        - uni_z
-      properties:
-        name:
-          type: string
-        uni_a:
-          $ref: '#/components/schemas/Endpoint'
-        uni_z:
-          $ref: '#/components/schemas/Endpoint'
-        dynamic_backup_path:
-          type: boolean
-        metadata:
-          type: object
-
-    Endpoint: # Can be referenced via '#/components/schemas/Endpoint'
-      type: object
-      required:
-        - port_id
-      properties:
-        port_id:
-          type: string
-          minLength: 25
-          maxLength: 30
-          pattern: '^((urn:sdx:port:)[A-Za-z0-9_.\:/-]*)$'
-        tag:
-          type: integer
-
-  /v1/l2vpn_ptp/{evc_id}:
+  /v1/l2vpn/{service_id}:
     get:
-      summary: Get details of a L2VPN PTP EVC
-      description: Get the details of a single EVC
-      operationId: get_l2vpn_ptp
+      summary: List/Retrieve one SDX L2VPN
+      description: Get the details of a single SDX L2VPN
+      operationId: get_l2vpn
       parameters:
-        - name: evc_id
+        - name: service_id
           in: path
           required: true
           schema:
@@ -117,45 +109,193 @@ components:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EVC'
-        '400':
-          description: Circuit id not found.
-
+                $ref: '#/components/schemas/L2VPN'
+        '401':
+          description: Not Authorized
+        '404':
+          description: Service ID not found
     patch:
-      summary: Update a L2VPN PTP EVC
-      description: Update a EVC based on payload.
-      operationId: update_l2vpn_ptp
+      summary: Edit/Change a SDX L2VPN
+      description: Edit/Change a SDX L2VPN based on payload.
+      operationId: update_l2vpn
       parameters:
-        - name: evc_id
+        - name: service_id
           in: path
           required: true
           schema:
             type: string
       requestBody:
-        description: Update a circuit based on the evc_id and payload given
+        description: Update a SDX L2VPN based on the service_id and payload given
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EVC'
+              $ref: '#/components/schemas/NewL2VPN'
       responses:
-        '200':
-          description: OK
-        '404':
-          description: EVC id not found.
+        '201':
+          description: L2VPN Service Modified
         '400':
-          description: Bad request.
+          description: Request does not have a valid JSON or body is incomplete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not Authorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Request not compatible (For instance, when a L2VPN P2MP is requested but only L2VPN P2P is supported)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: L2VPN Service ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicts with a different L2VPN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Can't fulfill the strict QoS requirements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '411':
+          description: Scheduling not possible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
     delete:
-      summary: Delete a L2VPN PTP EVC
-      description: Delete an EVC.
-      operationId: delete_l2vpn_ptp
+      summary: Delete a SDX L2VPN
+      description: Delete a SDX L2VPN
+      operationId: delete_l2vpn
       parameters:
-        - name: evc_id
+        - name: service_id
           in: path
           required: true
           schema:
             type: string
       responses:
-        '200':
-          description: OK
+        '201':
+          description: L2VPN Deleted
+        '401':
+          description: Not Authorized
+        '404':
+          description: L2VPN Service ID provided does not exist
+
+components:
+  schemas:
+    NewL2VPN: # Can be referenced via '#/components/schemas/NewL2VPN'
+      type: object
+      required:
+        - name
+        - endpoints
+      properties:
+        name:
+          type: string
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Endpoint'
+        description:
+          type: string
+        state:
+          type: string
+          enum:
+            - enabled  # the L2VPN is in administrative enable mode
+            - disabled  # the L2VPN is in administrative disable mode
+        notifications:
+          type: array
+          items:
+            type: object
+            properties:
+              email:
+                type: string
+            example:
+              email: user@domain.com
+        scheduling:
+          type: object
+          properties:
+            start_time:
+              type: string
+            end_time:
+              type: string
+        qos_metrics:
+          type: object
+          properties:
+            min_bw:
+              type: object
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                strict:
+                  type: boolean
+            max_delay:
+              type: object
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                  maximum: 1000
+                strict:
+                  type: boolean
+
+    Endpoint: # Can be referenced via '#/components/schemas/Endpoint'
+      type: object
+      required:
+        - port_id
+        - vlan
+      properties:
+        port_uri:
+          type: string
+        vlan:
+          type: string
+          pattern: '^(any|untagged|all|[0-9]+:[0-9]+|[0-9]+)$'
+
+    L2VPN: # Can be referenced via '#/components/schemas/L2VPN'
+      allOf:
+        - $ref: '#/components/schemas/NewL2VPN'
+      properties:
+        service_id:
+          type: string
+        creation_date:
+          type: string
+        archived_date:
+          type: string
+        status:
+          type: string
+          enum:
+            - up  # the L2VPN is operational
+            - down  # the L2VPN is not operational due to topology issues/lack of path or endpoints being down
+            - error  # when there is an error with the L2VPN
+            - under provisioning  # when the L2VPN is still being provisioned by the OXPs
+            - maintenance  # when the L2VPN is being affected by a network maintenance
+        counters_location:
+          type: string
+        last_modified:
+          type: string
+
+    Error: # Can be referenced via '#/components/schemas/Error'
+      type: object
+      properties:
+        code:
+          type: integer
+        description:
+          type: string
+      required:
+        - code
+        - description
