@@ -432,7 +432,7 @@ components:
       properties:
         id:
           type: string
-          pattern: '^urn:sdx:node:[A-Za-z0-9.,_/-]*$'
+          pattern: '^urn:sdx:node:[A-Za-z0-9_,./-]*:[A-Za-z0-9.,_/-]*$'
         name:
           type: string
           maxLength: 30
@@ -470,7 +470,7 @@ components:
       properties:
         id:
           type: string
-          pattern: '^urn:sdx:port:[A-Za-z0-9_.,/-]*$'
+          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
         name:
           type: string
           maxLength: 30
@@ -566,7 +566,7 @@ components:
       properties:
         id:
           type: string
-          pattern: '^urn:sdx:link:[A-Za-z0-9_.,/-]*$'
+          pattern: '^urn:sdx:link:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
         name:
           type: string
           maxLength: 30
