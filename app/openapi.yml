@@ -1,0 +1,617 @@
+openapi: 3.0.0
+info:
+  version: '1.0.0'
+  title: AtlanticWave SDX API spec
+  description: AtlanticWave SDX API specification for Topology and Provisioning
+servers:
+  - url: /api/kytos/sdx
+paths:
+  /l2vpn/1.0/:
+    get:
+      summary: List/Retrieve multiple SDX L2VPNs
+      description: List all active SDX L2VPN stored
+      operationId: list_active_l2vpn
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                items:
+                  $ref: '#/components/schemas/L2VPN'
+
+    post:
+      summary: Creates a new L2VPN PTP
+      operationId: create_l2vpn_ptp
+      requestBody:
+        description: Creates a new L2VPN PTP based on the endpoints and
+          constraints given.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewL2VPN'
+      responses:
+        '201':
+          description: L2VPN Service Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service_id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Request does not have a valid JSON or body is incomplete/incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not Authorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Request not compatible (For instance, when a L2VPN P2MP is requested but only L2VPN P2P is supported)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: L2VPN Service already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Can't fulfill the strict QoS requirements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '411':
+          description: Scheduling not possible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Attribute not supported by the SDX-LC/OXPO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /l2vpn/1.0/archived:
+    get:
+      summary: List/Retrieve multiple archived SDX L2VPNs
+      description: List archived SDX L2VPN stored
+      operationId: list_archived_l2vpn
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                items:
+                  $ref: '#/components/schemas/L2VPN'
+
+  /l2vpn/1.0/{service_id}:
+    get:
+      summary: List/Retrieve one SDX L2VPN
+      description: Get the details of a single SDX L2VPN
+      operationId: get_l2vpn
+      parameters:
+        - name: service_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/L2VPN'
+        '401':
+          description: Not Authorized
+        '404':
+          description: Service ID not found
+    patch:
+      summary: Edit/Change a SDX L2VPN
+      description: Edit/Change a SDX L2VPN based on payload.
+      operationId: update_l2vpn
+      parameters:
+        - name: service_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Update a SDX L2VPN based on the service_id and payload given
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewL2VPN'
+      responses:
+        '201':
+          description: L2VPN Service Modified
+        '400':
+          description: Request does not have a valid JSON or body is incomplete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not Authorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Request not compatible (For instance, when a L2VPN P2MP is requested but only L2VPN P2P is supported)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: L2VPN Service ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflicts with a different L2VPN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Can't fulfill the strict QoS requirements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '411':
+          description: Scheduling not possible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete a SDX L2VPN
+      description: Delete a SDX L2VPN
+      operationId: delete_l2vpn
+      parameters:
+        - name: service_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: L2VPN Deleted
+        '401':
+          description: Not Authorized
+        '404':
+          description: L2VPN Service ID provided does not exist
+
+  /topology/2.0.0/:
+    get:
+      summary: Retrieve SDX Topology accordingly to Topology Data Model Spec 2.0.0
+      description: Get SDX Topology
+      operationId: get_topology
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                items:
+                  $ref: '#/components/schemas/Topology'
+
+    post:
+      summary: Send the topology to SDX-LC
+      description: Trigger a operation to send SDX Topology to SDX-LC
+      operationId: send_topology_to_sdxlc
+      responses:
+        '200':
+          description: OK
+        '424':
+          description: Failed to send topology to SDX-LC
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+
+components:
+  schemas:
+    NewL2VPN: # Can be referenced via '#/components/schemas/NewL2VPN'
+      type: object
+      required:
+        - name
+        - endpoints
+      properties:
+        name:
+          type: string
+          maxLength: 50
+        endpoints:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/Endpoint'
+        description:
+          type: string
+          maxLength: 255
+        state:
+          type: string
+          enum:
+            - enabled  # the L2VPN is in administrative enable mode
+            - disabled  # the L2VPN is in administrative disable mode
+        notifications:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            properties:
+              email:
+                type: string
+                format: email
+            additionalProperties: false
+            required:
+              - email
+            example:
+              email: user@domain.com
+        scheduling:
+          type: object
+          properties:
+            start_time:
+              type: string
+            end_time:
+              type: string
+          additionalProperties: false
+        qos_metrics:
+          type: object
+          properties:
+            min_bw:
+              type: object
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                strict:
+                  type: boolean
+              additionalProperties: false
+            max_delay:
+              type: object
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                  maximum: 1000
+                strict:
+                  type: boolean
+              additionalProperties: false
+            max_number_oxps:
+              type: object
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                strict:
+                  type: boolean
+              additionalProperties: false
+          additionalProperties: false
+
+    Endpoint: # Can be referenced via '#/components/schemas/Endpoint'
+      type: object
+      required:
+        - port_id
+        - vlan
+      properties:
+        port_id:
+          type: string
+          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
+        vlan:
+          type: string
+          pattern: '^(any|untagged|all|[0-9]+:[0-9]+|[0-9]+)$'
+      additionalProperties: false
+
+    L2VPN: # Can be referenced via '#/components/schemas/L2VPN'
+      allOf:
+        - $ref: '#/components/schemas/NewL2VPN'
+      properties:
+        service_id:
+          type: string
+          format: uuid
+        ownership:
+          type: string
+        creation_date:
+          type: string
+          format: date-time
+        archived_date:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - up  # the L2VPN is operational
+            - down  # the L2VPN is not operational due to topology issues/lack of path or endpoints being down
+            - error  # when there is an error with the L2VPN
+            - under provisioning  # when the L2VPN is still being provisioned by the OXPs
+            - maintenance  # when the L2VPN is being affected by a network maintenance
+        counters_location:
+          type: string
+        last_modified:
+          type: string
+          format: date-time
+        current_path:
+          type: array
+          items:
+            type: string
+        oxp_service_ids:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    Error: # Can be referenced via '#/components/schemas/Error'
+      type: object
+      properties:
+        description:
+          type: string
+
+    Topology: # Can be referenced via '#/components/schemas/Topology'
+      type: object
+      required:
+        - name
+        - id
+        - version
+        - model_version
+        - timestamp
+        - nodes
+        - links
+      additionalProperties: false
+      properties:
+          name:
+            type: string
+            maxLength: 30
+            pattern: '^[A-Za-z0-9_,./-]*$'
+          id:
+            type: string
+            pattern: '^urn:sdx:topology:[A-Za-z0-9_.:-]*$'
+          version:
+            type: integer
+            format: int64
+            minimum: 1
+          model_version:
+            type: string
+          timestamp:
+            type: string
+            format: date-time
+          nodes:
+            type: array
+            minItems: 1
+            items:
+              $ref: '#/components/schemas/Node'
+          links:
+            type: array
+            minItems: 1
+            items:
+              $ref: '#/components/schemas/Link'
+          services:
+            type: array
+            items:
+              type: string
+              enum: ['l2vpn-ptp', 'l2vpn-ptmp']
+
+    Node: # Can be referenced via '#/components/schemas/Node'
+      type: object
+      required:
+        - id
+        - name
+        - location
+        - ports
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^urn:sdx:node:[A-Za-z0-9_,./-]*:[A-Za-z0-9.,_/-]*$'
+        name:
+          type: string
+          maxLength: 30
+          pattern: '^[A-Za-z0-9.,_/-]*$'
+        location:
+          $ref: '#/components/schemas/Location'
+        ports:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Port'
+        status:
+          type: string
+          enum:
+            - up  # the node is operational
+            - down  # the node is not operational
+            - error  # there is an error with the node
+        state:
+          type: string
+          enum:
+            - enabled  # the node is in administrative enabled mode
+            - disabled  # the node is in administrative disabled mode
+            - maintenance  #  the node is under maintenance (not available for use)
+
+    Port: # Can be referenced via '#/components/schemas/Port'
+      type: object
+      required:
+        - id
+        - name
+        - node
+        - type
+        - status
+        - state
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
+        name:
+          type: string
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.,/-]*$'
+        node:
+          type: string
+          pattern: '^urn:sdx:node:[A-Za-z0-9_.,/-]*$'
+        type:
+          type: string
+          enum: ['100FE','1GE','10GE','25GE','40GE','50GE','100GE','400GE','Other']
+        mtu:
+          type: integer
+          format: int32
+          minimum: 1500
+          maximum: 10000
+        nni:
+          type: string
+        status:
+          type: string
+          enum: ['up', 'down', 'error']
+        state:
+          type: string
+          enum: ['enabled', 'disabled', 'maintenance']
+        services:
+          items:
+            type: object
+            properties:
+              l2vpn-ptp:
+                type: object
+                properties:
+                  vlan_range:
+                    type: array
+                    items:
+                      type: integer
+                    minItems: 2
+                    maxItems: 2
+              l2vpn-ptmp:
+                type: object
+                properties:
+                  vlan_range:
+                    type: array
+                    items:
+                      type: integer
+                    minItems: 2
+                    maxItems: 2
+        private:
+          type: array
+          items:
+            type: string
+            enum: ['mtu', 'status', 'state', 'services']
+
+    Location: # Can be referenced via '#/components/schemas/Location'
+      type: object
+      required:
+        - address
+        - latitude
+        - longitude
+        - iso3166_2_lvl4
+      properties:
+        address:
+          type: string
+          maxLength: 255
+        latitude:
+          type: number
+          minimum: -90.0
+          maximum: 90.0
+        longitude:
+          type: number
+          minimum: -90.0
+          maximum: 90.0
+        iso3166_2_lvl4:
+          type: string
+          minLength: 5
+          maxLength: 5
+          pattern: '^[A-Z]{2}-[a-zA-Z0-9]{1,3}$'
+        private:
+          type: array
+          items:
+            type: string
+            enum: ['address', 'latitude', 'longitude', 'iso3166_2_lvl4']
+
+    Link: # Can be referenced via '#/components/schemas/Link'
+      type: object
+      required:
+        - id
+        - name
+        - ports
+        - bandwidth
+        - type
+        - status
+        - state
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          pattern: '^urn:sdx:link:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
+        name:
+          type: string
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_.,/-]*$'
+        ports:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: string
+            pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
+        type:
+          type: string
+          enum: ['intra']
+        bandwidth:
+          type: number
+          format: float
+          minimum: 0
+        residual_bandwidth:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        latency:
+          type: number
+          format: float
+          minimum: 0
+        packet_loss:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        availability:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: ['up','down','error']
+        state:
+          type: string
+          enum: ['enabled','disabled','maintenance']
+        private:
+          type: array
+          items:
+            type: string
+            enum: ['residual_bandwidth', 'latency', 'packet_loss']

@@ -35,3 +35,6 @@ OPERATIONAL_EVENTS = [
 
 # Kytos mef_eline endpoint for creating L2VPN PTP
 KYTOS_EVC_URL = "http://127.0.0.1:8181/api/kytos/mef_eline/v2/evc/"
+
+# Kytos topology API
+KYTOS_TOPOLOGY_URL = "http://127.0.0.1:8181/api/kytos/topology/v3/"

@@ -6,7 +6,7 @@ import shelve
 import requests
 from napps.kytos.sdx_topology.convert_topology import ParseConvertTopology \
           # pylint: disable=E0401
-from napps.kytos.sdx_topology import settings, utils, topology_mock \
+from napps.kytos.sdx_topology import settings, utils \
         # pylint: disable=E0401
 
 from kytos.core import KytosNApp, log, rest
@@ -14,9 +14,6 @@ from kytos.core.events import KytosEvent
 from kytos.core.helpers import listen_to
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  content_type_json_or_415, get_json_or_400)
-
-HSH = "##########"
-URN = "urn:sdx:"
 
 
 class Main(KytosNApp):  # pylint: disable=R0904
@@ -37,9 +34,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
         self.sdx_topology = {}  # pylint: disable=W0201
         self.shelve_loaded = False  # pylint: disable=W0201
         self.version_control = False  # pylint: disable=W0201
-        self.sdxlc_url = os.environ.get("SDXLC_URL")
-        self.oxpo_name = os.environ.get("OXPO_NAME")
-        self.oxpo_url = os.environ.get("OXPO_URL")
+        self.sdxlc_url = os.environ.get("SDXLC_URL", "")
+        self.oxpo_name = os.environ.get("OXPO_NAME", "")
+        self.oxpo_url = os.environ.get("OXPO_URL", "")
         # mapping from IDs used by kytos and SDX
         # ex: urn:sdx:port:sax.net:Sax01:40 <--> cc:00:00:00:00:00:00:01:40
         self.kytos2sdx = {}
@@ -71,7 +68,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
     @staticmethod
     def get_kytos_topology():
         """retrieve topology from API"""
-        kytos_topology_url = os.environ.get("KYTOS_TOPOLOGY")
+        kytos_topology_url = settings.KYTOS_TOPOLOGY_URL
         kytos_topology = requests.get(
                 kytos_topology_url, timeout=10).json()
         result = kytos_topology["topology"]
@@ -79,9 +76,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
     def post_sdx_lc(self, event_type=None):
         """ return the status from post sdx topology to sdx lc"""
-        sdxlc_url = self.sdxlc_url
+        # if not SDXLC is configured we ignore this part
+        if not self.sdxlc_url:
+            return {"result": self.sdx_topology, "status_code": 200}
+
         post_topology = requests.post(
-                sdxlc_url,
+                self.sdxlc_url,
                 timeout=60,
                 json=self.sdx_topology)
         if post_topology.status_code == 200:
@@ -126,8 +126,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 elif event_type == "operational":
                     timestamp = event_timestamp
                 else:
-                    return {"result": topology_mock.topology_mock(),
-                            "status_code": 401}
+                    return {"result": {}, "status_code": 401}
                 topology_converted = ParseConvertTopology(
                     topology=self.get_kytos_topology(),
                     version=version,
@@ -137,8 +136,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     oxp_url=self.dict_shelve['url'],
                 ).parse_convert_topology()
                 return {"result": topology_converted, "status_code": 200}
-            return {"result": topology_mock.topology_mock(),
-                    "status_code": 401}
+            return {"result": {}, "status_code": 401}
         except Exception as err:  # pylint: disable=W0703
             log.info("validation Error, status code 401:", err)
             return {"result": "Validation Error", "status_code": 401}
@@ -162,7 +160,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                         "links": topology_updated["links"],
                         }
             else:
-                self.sdx_topology = topology_mock.topology_mock()
+                self.sdx_topology = {}
             evaluate_topology = self.validate_sdx_topology()
             if evaluate_topology["status_code"] == 200:
                 self.kytos2sdx = topology_updated.get("kytos2sdx", {})
@@ -229,7 +227,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 if 'id' not in open_shelve.keys() or \
                         'name' not in open_shelve.keys() or \
                         'version' not in open_shelve.keys():
-                    open_shelve['id'] = URN+"topology:"+self.oxpo_url
+                    open_shelve['id'] = "urn:sdx:topology:"+self.oxpo_url
                     open_shelve['name'] = self.oxpo_name
                     open_shelve['url'] = self.oxpo_url
                     open_shelve['version'] = 0
@@ -274,56 +272,6 @@ class Main(KytosNApp):  # pylint: disable=R0904
                         log_events['events'] = shelve_events
                         log_events.close()
         return JSONResponse(dict_shelve)
-
-    # rest api tests
-    @rest("v1/validate_sdx_topology", methods=["POST"])
-    def get_validate_sdx_topology(self, request: Request) -> JSONResponse:
-        """ REST to return the validated sdx topology status"""
-        # pylint: disable=W0201
-        content = get_json_or_400(request, self.controller.loop)
-        self.sdx_topology = content.get("sdx_topology")
-        if self.sdx_topology is None:
-            self.sdx_topology = topology_mock.topology_mock()
-        response = self.validate_sdx_topology()
-        result = response["result"]
-        status_code = response["status_code"]
-        return JSONResponse(result, status_code)
-
-    @rest("v1/convert_topology/{event_type}/{event_timestamp}")
-    def get_converted_topology(self, request: Request) -> JSONResponse:
-        """ REST to return the converted sdx topology"""
-        event_type = request.path_params["event_type"]
-        event_timestamp = request.path_params["event_timestamp"]
-        response = self.convert_topology(event_type, event_timestamp)
-        result = response["result"]
-        status_code = response["status_code"]
-        return JSONResponse(result, status_code)
-
-    @rest("v1/post_sdx_topology/{event_type}/{event_timestamp}")
-    def get_sdx_topology(self, request: Request) -> JSONResponse:
-        """ REST to return the sdx topology loaded"""
-        event_type = request.path_params["event_type"]
-        event_timestamp = request.path_params["event_timestamp"]
-        response = self.post_sdx_topology(event_type, event_timestamp)
-        result = response["result"]
-        status_code = response["status_code"]
-        return JSONResponse(result, status_code)
-
-    @rest("v1/listen_event", methods=["POST"])
-    def get_listen_event(self, request: Request) -> JSONResponse:
-        """consume call listen Event"""
-        try:
-            result = get_json_or_400(request, self.controller.loop)
-            name = result.get("name")
-            content = result.get("content")
-            event = KytosEvent(
-                    name=name, content=content)
-            # self.controller.buffers.app.put(event)
-            event_result = self.listen_event(event)
-            return JSONResponse(event_result)
-        except requests.exceptions.HTTPError as http_error:
-            raise SystemExit(
-                    http_error, detail="listen topology fails") from http_error
 
     @rest("v1/shelve/topology", methods=["GET"])
     def get_shelve_topology(self, _request: Request) -> JSONResponse:
