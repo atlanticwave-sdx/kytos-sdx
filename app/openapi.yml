@@ -526,6 +526,7 @@ components:
           type: array
           items:
             type: string
+            enum: ['mtu', 'status', 'state', 'services']
 
     Location: # Can be referenced via '#/components/schemas/Location'
       type: object
@@ -553,6 +554,7 @@ components:
           type: array
           items:
             type: string
+            enum: ['address', 'latitude', 'longitude', 'iso3166_2_lvl4']
 
     Link: # Can be referenced via '#/components/schemas/Link'
       type: object
@@ -610,3 +612,4 @@ components:
           type: array
           items:
             type: string
+            enum: ['residual_bandwidth', 'latency', 'packet_loss']
