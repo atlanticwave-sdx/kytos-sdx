@@ -494,10 +494,6 @@ components:
         state:
           type: string
           enum: ['enabled', 'disabled', 'maintenance']
-        label_range:
-          type: array
-          items:
-            type: string
         services:
           items:
             type: object
