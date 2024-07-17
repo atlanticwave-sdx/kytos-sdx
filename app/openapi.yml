@@ -486,8 +486,6 @@ components:
           format: int32
           minimum: 1500
           maximum: 10000
-        short_name:
-          type: string
         nni:
           type: string
         status:
