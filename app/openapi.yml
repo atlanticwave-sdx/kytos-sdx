@@ -454,6 +454,10 @@ components:
             - enabled  # the node is in administrative enabled mode
             - disabled  # the node is in administrative disabled mode
             - maintenance  #  the node is under maintenance (not available for use)
+        private:
+          type: array
+          items:
+            type: string
 
     Port: # Can be referenced via '#/components/schemas/Port'
       type: object
