@@ -326,7 +326,7 @@ components:
       properties:
         port_id:
           type: string
-          pattern: '^urn:sdx:port:[A-Za-z0-9_.,/-]*$'
+          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
         vlan:
           type: string
           pattern: '^(any|untagged|all|[0-9]+:[0-9]+|[0-9]+)$'
@@ -577,25 +577,31 @@ components:
           maxItems: 2
           items:
             type: string
+            pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
         type:
           type: string
           enum: ['intra']
         bandwidth:
           type: number
           format: float
+          minimum: 0
         residual_bandwidth:
-          type: integer
+          type: number
+          format: float
           minimum: 0
           maximum: 100
         latency:
           type: number
           format: float
+          minimum: 0
         packet_loss:
-          type: integer
+          type: number
+          format: float
           minimum: 0
           maximum: 100
         availability:
-          type: integer
+          type: number
+          format: float
           minimum: 0
           maximum: 100
         status:
