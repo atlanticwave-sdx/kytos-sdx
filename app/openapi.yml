@@ -247,6 +247,7 @@ components:
       properties:
         name:
           type: string
+          maxLength: 50
         endpoints:
           type: array
           minItems: 2
@@ -323,7 +324,7 @@ components:
         - port_id
         - vlan
       properties:
-        port_uri:
+        port_id:
           type: string
         vlan:
           type: string
