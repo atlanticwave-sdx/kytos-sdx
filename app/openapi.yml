@@ -528,6 +528,7 @@ components:
         - address
         - latitude
         - longitude
+        - iso3166_2_lvl4
       properties:
         address:
           type: string
