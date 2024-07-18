@@ -9,46 +9,46 @@ class ParseConvertTopology:
     """Parse Topology  class of kytos/sdx_topology NApp."""
 
     def __init__(self, **args):
-        self.kytos_topology = args['topology']
-        self.version = args['version']
-        self.timestamp = args['timestamp']
-        self.oxp_name = args['oxp_name']
-        self.oxp_url = args['oxp_url']
+        self.kytos_topology = args["topology"]
+        self.version = args["version"]
+        self.timestamp = args["timestamp"]
+        self.oxp_name = args["oxp_name"]
+        self.oxp_url = args["oxp_url"]
         self.model_version = "2.0.0"
         # mapping from Kytos to SDX and vice-versa
         self.kytos2sdx = {}
         self.sdx2kytos = {}
 
     def get_kytos_nodes(self) -> dict:
-        """ return parse_args["topology"]["switches"] values """
+        """return parse_args["topology"]["switches"] values"""
         return self.kytos_topology["switches"].values()
 
     def get_kytos_links(self) -> dict:
-        """ return parse_args["topology"]["links"] values """
+        """return parse_args["topology"]["links"] values"""
         return self.kytos_topology["links"].values()
 
     @staticmethod
     def get_link_port_speed(speed: str) -> int:
         """Function to obtain the speed of a specific port in the link."""
         type_to_speed = {
-                "400GE": 400,
-                "100GE": 100,
-                "50GE": 50,
-                "40GE": 40,
-                "25GE": 25,
-                "10GE": 10,
-                "50000000000": 400,
-                "50000000000.0": 400,
-                "12500000000": 100,
-                "12500000000.0": 100,
-                "6250000000": 50,
-                "6250000000.0": 50,
-                "5000000000": 40,
-                "5000000000.0": 40,
-                "3125000000": 25,
-                "3125000000.0": 25,
-                "1250000000": 10,
-                "1250000000.0": 10,
+            "400GE": 400,
+            "100GE": 100,
+            "50GE": 50,
+            "40GE": 40,
+            "25GE": 25,
+            "10GE": 10,
+            "50000000000": 400,
+            "50000000000.0": 400,
+            "12500000000": 100,
+            "12500000000.0": 100,
+            "6250000000": 50,
+            "6250000000.0": 50,
+            "5000000000": 40,
+            "5000000000.0": 40,
+            "3125000000": 25,
+            "3125000000.0": 25,
+            "1250000000": 10,
+            "1250000000.0": 10,
         }
 
         return type_to_speed.get(speed, 0)
@@ -57,24 +57,24 @@ class ParseConvertTopology:
     def get_type_port_speed(speed: str) -> str:
         """Function to obtain the speed of a specific port type."""
         speed_to_type = {
-                "400GE": "400GE",
-                "50000000000": "400GE",
-                "50000000000.0": "400GE",
-                "100GE": "100GE",
-                "12500000000": "100GE",
-                "12500000000.0": "100GE",
-                "50GE": "50GE",
-                "6250000000": "50GE",
-                "6250000000.0": "50GE",
-                "40GE": "40GE",
-                "5000000000": "40GE",
-                "5000000000.0": "40GE",
-                "25GE": "25GE",
-                "3125000000": "25GE",
-                "3125000000.0": "25GE",
-                "10GE": "10GE",
-                "1250000000": "10GE",
-                "1250000000.0": "10GE",
+            "400GE": "400GE",
+            "50000000000": "400GE",
+            "50000000000.0": "400GE",
+            "100GE": "100GE",
+            "12500000000": "100GE",
+            "12500000000.0": "100GE",
+            "50GE": "50GE",
+            "6250000000": "50GE",
+            "6250000000.0": "50GE",
+            "40GE": "40GE",
+            "5000000000": "40GE",
+            "5000000000.0": "40GE",
+            "25GE": "25GE",
+            "3125000000": "25GE",
+            "3125000000.0": "25GE",
+            "10GE": "10GE",
+            "1250000000": "10GE",
+            "1250000000.0": "10GE",
         }
 
         return speed_to_type.get(speed, "Other")
@@ -109,7 +109,7 @@ class ParseConvertTopology:
         return f"urn:sdx:port:{self.oxp_url}:{switch_name}:{port_no}"
 
     def get_port(self, sdx_node_name: str, interface: dict) -> dict:
-        """Function to retrieve a network device's port (or interface) """
+        """Function to retrieve a network device's port (or interface)"""
 
         sdx_port = {}
         sdx_port["id"] = self.get_port_urn(interface)
@@ -133,11 +133,11 @@ class ParseConvertTopology:
 
         vlan_range = interface["metadata"].get("sdx_vlan_range")
         if not vlan_range:
-            vlan_range = interface.get("tag_ranges", [[1,4095]])
+            vlan_range = interface.get("tag_ranges", [[1, 4095]])
 
         sdx_port["services"] = {
             "l2vpn-ptp": {"vlan_range": vlan_range},
-            #"l2vpn-ptmp":{"vlan_range": vlan_range}
+            # "l2vpn-ptmp":{"vlan_range": vlan_range}
         }
 
         sdx_port["private"] = ["status"]
@@ -146,7 +146,7 @@ class ParseConvertTopology:
 
     def get_ports(self, sdx_node_name: str, interfaces: dict) -> list:
         """Function that calls the main individual get_port function,
-        to get a full list of ports from a node/ interface """
+        to get a full list of ports from a node/ interface"""
         ports = []
         for interface in interfaces.values():
             port_no = interface["port_number"]
@@ -187,8 +187,7 @@ class ParseConvertTopology:
             "private": [],
         }
 
-        sdx_node["ports"] = self.get_ports(
-                sdx_node["name"], kytos_node["interfaces"])
+        sdx_node["ports"] = self.get_ports(sdx_node["name"], kytos_node["interfaces"])
 
         sdx_node["status"] = self.get_status(kytos_node["active"])
         sdx_node["state"] = self.get_state(kytos_node["enabled"])
@@ -218,10 +217,12 @@ class ParseConvertTopology:
         ]
         sdx_link["type"] = "intra"
         sdx_link["bandwidth"] = self.get_link_port_speed(
-            str(min(
-                kytos_link["endpoint_a"]["speed"],
-                kytos_link["endpoint_b"]["speed"],
-            ))
+            str(
+                min(
+                    kytos_link["endpoint_a"]["speed"],
+                    kytos_link["endpoint_b"]["speed"],
+                )
+            )
         )
         sdx_link["residual_bandwidth"] = link_md.get("residual_bandwidth", 100)
         sdx_link["latency"] = link_md.get("latency", 0)
@@ -248,7 +249,7 @@ class ParseConvertTopology:
         return sdx_links
 
     def parse_convert_topology(self):
-        """ function get_sdx_topology """
+        """function get_sdx_topology"""
         topology = {}
         topology["name"] = self.oxp_name
         topology["id"] = f"urn:sdx:topology:{self.oxp_url}"
