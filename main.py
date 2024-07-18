@@ -68,11 +68,18 @@ class Main(KytosNApp):  # pylint: disable=R0904
     @staticmethod
     def get_kytos_topology():
         """retrieve topology from API"""
-        kytos_topology_url = settings.KYTOS_TOPOLOGY_URL
         kytos_topology = requests.get(
-                kytos_topology_url, timeout=10).json()
-        result = kytos_topology["topology"]
-        return result
+                settings.KYTOS_TOPOLOGY_URL, timeout=10).json()
+        topology = kytos_topology["topology"]
+        response = requests.get(
+            settings.KYTOS_TAGS_URL, timeout=10)
+        if response.status_code != 200:
+            return topology
+        kytos_tag_ranges = response.json()
+        for intf_id, tag_ranges in kytos_tag_ranges.items():
+            sw_id = intf_id[:23]
+            topology["switches"][sw_id]["interfaces"][intf_id]["tag_ranges"] = tag_ranges["tag_ranges"]
+        return topology
 
     def post_sdx_lc(self, event_type=None):
         """ return the status from post sdx topology to sdx lc"""
@@ -158,6 +165,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                         "timestamp": topology_updated["timestamp"],
                         "nodes": topology_updated["nodes"],
                         "links": topology_updated["links"],
+                        "services": topology_updated["services"],
                         }
             else:
                 self.sdx_topology = {}
@@ -167,12 +175,13 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 self.sdx2kytos = topology_updated.get("sdx2kytos", {})
                 result = self.post_sdx_lc(event_type)
                 return result
+            log.error("Validate topology failed %s" % (evaluate_topology))
             with shelve.open("events_shelve") as log_events:
                 shelve_events = log_events['events']
                 shelve_events.append(
                         {
                             "name": "Validation error",
-                            "Error": evaluate_topology["error_message"]
+                            "Error": evaluate_topology
                         })
                 log_events['events'] = shelve_events
                 log_events.close()
@@ -231,8 +240,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     open_shelve['name'] = self.oxpo_name
                     open_shelve['url'] = self.oxpo_url
                     open_shelve['version'] = 0
-                    open_shelve['model_version'] = os.environ.get(
-                            "MODEL_VERSION")
+                    open_shelve['model_version'] = "2.0.0"
                     open_shelve['timestamp'] = utils.get_timestamp()
                     open_shelve['nodes'] = []
                     open_shelve['links'] = []
@@ -272,6 +280,11 @@ class Main(KytosNApp):  # pylint: disable=R0904
                         log_events['events'] = shelve_events
                         log_events.close()
         return JSONResponse(dict_shelve)
+
+    @rest("v1/topology", methods=["GET"])
+    def get_topology(self, _request: Request) -> JSONResponse:
+        """return sdx topology"""
+        return JSONResponse(self.sdx_topology)
 
     @rest("v1/shelve/topology", methods=["GET"])
     def get_shelve_topology(self, _request: Request) -> JSONResponse:
