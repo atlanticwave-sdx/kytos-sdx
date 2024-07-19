@@ -1,5 +1,4 @@
 """SdxController."""
-
 # pylint: disable=unnecessary-lambda,invalid-name
 import os
 from datetime import datetime
@@ -35,7 +34,12 @@ class SdxController:
 
     def get_sdx_topology(self) -> Dict:
         """Get latest SDX Topology."""
-        return self.db.pipelines.find_one({"_id": "latest"}) or {}
+        return (
+            self.db.pipelines.find_one(
+                {"_id": "latest"}
+            )
+            or {}
+        )
 
     def upsert_sdx_topology(self, sdx_topology: Dict) -> Optional[Dict]:
         """Update or insert an EVC"""
