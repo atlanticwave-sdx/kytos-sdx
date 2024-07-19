@@ -21,8 +21,6 @@ from kytos.core.rest_api import (
     get_json_or_400,
 )
 
-from .controllers import SdxController
-
 
 class Main(KytosNApp):  # pylint: disable=R0904
     """Main class of amlight/sdx NApp.
@@ -39,13 +37,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
         So, if you have any setup routine, insert it here.
         """
         self.event_info = {}  # pylint: disable=W0201
+        self.sdx_topology = {}  # pylint: disable=W0201
         self.shelve_loaded = False  # pylint: disable=W0201
         self.version_control = False  # pylint: disable=W0201
         self.sdxlc_url = os.environ.get("SDXLC_URL", "")
         self.oxpo_name = os.environ.get("OXPO_NAME", "")
         self.oxpo_url = os.environ.get("OXPO_URL", "")
-        self.sdx_controller = self.get_sdx_controller()
-        self.sdx_topology = self.sdx_controller.get_sdx_topology()
         # mapping from IDs used by kytos and SDX
         # ex: urn:sdx:port:sax.net:Sax01:40 <--> cc:00:00:00:00:00:00:01:40
         self.kytos2sdx = {}
@@ -60,11 +57,6 @@ class Main(KytosNApp):  # pylint: disable=R0904
             self.execute_as_loop(30)  # 30-second interval.
         """
         self.load_shelve()
-
-    @staticmethod
-    def get_sdx_controller():
-        """Get SdxController"""
-        return SdxController()
 
     def shutdown(self):
         """Run when your NApp is unloaded.
