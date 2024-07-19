@@ -412,7 +412,6 @@ components:
               $ref: '#/components/schemas/Node'
           links:
             type: array
-            minItems: 1
             items:
               $ref: '#/components/schemas/Link'
           services:
