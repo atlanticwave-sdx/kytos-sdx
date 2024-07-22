@@ -326,7 +326,7 @@ components:
       properties:
         port_id:
           type: string
-          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
+          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*:[A-Za-z0-9_.,/-]*$'
         vlan:
           type: string
           pattern: '^(any|untagged|all|[0-9]+:[0-9]+|[0-9]+)$'
@@ -469,7 +469,7 @@ components:
       properties:
         id:
           type: string
-          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
+          pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*:[A-Za-z0-9_.,/-]*$'
         name:
           type: string
           maxLength: 30
@@ -576,7 +576,7 @@ components:
           maxItems: 2
           items:
             type: string
-            pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*$'
+            pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*:[A-Za-z0-9_.,/-]*$'
         type:
           type: string
           enum: ['intra']
