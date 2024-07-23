@@ -104,7 +104,7 @@ class ParseConvertTopology:
         switch_b = kytos_link["endpoint_b"]["id"][:23]
         node_swa = self.get_kytos_node_name(switch_a)
         node_swb = self.get_kytos_node_name(switch_b)
-        return f"{node_swa}__{interface_a}__{node_swb}__{interface_b}"
+        return f"{node_swa}:{interface_a}:{node_swb}:{interface_b}"
 
     def get_port_urn(self, interface: dict) -> str:
         """function to generate the full urn address for a node"""
@@ -118,7 +118,9 @@ class ParseConvertTopology:
 
         sdx_port = {}
         sdx_port["id"] = self.get_port_urn(interface)
-        sdx_port["name"] = interface["name"]
+        sdx_port["name"] = interface["metadata"].get("port_name", "")[:30]
+        if not sdx_port["name"]:
+            sdx_port["name"] = interface["name"][:30]
         sdx_port["node"] = f"urn:sdx:node:{self.oxp_url}:{sdx_node_name}"
         sdx_port["type"] = self.get_type_port_speed(str(interface["speed"]))
         sdx_port["status"] = self.get_status(interface["active"])
@@ -168,8 +170,10 @@ class ParseConvertTopology:
         if not switch:
             raise ValueError(f"Switch {switch_id} not found on the topology")
         if "node_name" in switch["metadata"]:
-            return switch["metadata"]["node_name"]
-        return switch["data_path"]
+            return switch["metadata"]["node_name"][:30]
+        if len(switch["data_path"]) <= 30
+            return switch["data_path"]
+        return switch["dpid"].replace(":", "-")
 
     def get_sdx_node(self, kytos_node: dict) -> dict:
         """function that builds every Node dictionary object with all the
