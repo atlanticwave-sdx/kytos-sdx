@@ -503,18 +503,22 @@ components:
                   vlan_range:
                     type: array
                     items:
-                      type: integer
-                    minItems: 2
-                    maxItems: 2
+                      type: array
+                      items:
+                        type: integer
+                      minItems: 2
+                      maxItems: 2
               l2vpn-ptmp:
                 type: object
                 properties:
                   vlan_range:
                     type: array
                     items:
-                      type: integer
-                    minItems: 2
-                    maxItems: 2
+                      type: array
+                      items:
+                        type: integer
+                      minItems: 2
+                      maxItems: 2
         private:
           type: array
           items:
