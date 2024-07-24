@@ -404,7 +404,7 @@ components:
             type: string
           timestamp:
             type: string
-            format: date-time
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
           nodes:
             type: array
             minItems: 1
@@ -476,7 +476,7 @@ components:
           pattern: '^[A-Za-z0-9_.,/-]*$'
         node:
           type: string
-          pattern: '^urn:sdx:node:[A-Za-z0-9_.,/-]*$'
+          pattern: '^urn:sdx:node:[A-Za-z0-9_.,/-]*:[A-Za-z0-9_.,/-]*$'
         type:
           type: string
           enum: ['100FE','1GE','10GE','25GE','40GE','50GE','100GE','400GE','Other']
@@ -485,8 +485,10 @@ components:
           format: int32
           minimum: 1500
           maximum: 10000
+          default: 1500
         nni:
           type: string
+          pattern: '^(urn:sdx:(port:[A-Za-z0-9_,./-]*|link):[A-Za-z0-9_.,/-]*:[A-Za-z0-9_.,/-]*)?$'
         status:
           type: string
           enum: ['up', 'down', 'error']
@@ -562,7 +564,6 @@ components:
         - name
         - ports
         - bandwidth
-        - type
         - status
         - state
       additionalProperties: false
