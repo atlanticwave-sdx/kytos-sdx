@@ -1,11 +1,11 @@
 {
   "author": "AmLight",
   "username": "kytos",
-  "name": "sdx_topology",
+  "name": "sdx",
   "description": "Amlight SDX API",
-  "version": "2.0",
+  "version": "0.2",
   "napp_dependencies": ["kytos/topology"],
   "license": "MIT",
   "tags": [],
-  "url": "https://github.com/atlanticwave-sdx/kytos-sdx-topology"
+  "url": "https://github.com/atlanticwave-sdx/kytos-sdx"
 }
