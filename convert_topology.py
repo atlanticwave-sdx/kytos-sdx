@@ -1,12 +1,12 @@
 """
-Main class of kytos/sdx_topology Kytos Network Application.
+Main class of kytos/sdx Kytos Network Application.
 
 SDX API
 """
 
 
 class ParseConvertTopology:
-    """Parse Topology  class of kytos/sdx_topology NApp."""
+    """Parse Topology  class of kytos/sdx NApp."""
 
     def __init__(self, **args):
         self.kytos_topology = args["topology"]
@@ -104,6 +104,12 @@ class ParseConvertTopology:
         switch_b = kytos_link["endpoint_b"]["id"][:23]
         node_swa = self.get_kytos_node_name(switch_a)
         node_swb = self.get_kytos_node_name(switch_b)
+        if node_swb == node_swa:
+            if interface_b < interface_a:
+                interface_a, interface_b = interface_b, interface_a
+        elif node_swb < node_swa:
+            node_swa, node_swb = node_swb, node_swa
+            interface_a, interface_b = interface_b, interface_a
         return f"{node_swa}/{interface_a}_{node_swb}/{interface_b}"
 
     def get_port_urn(self, interface: dict) -> str:
@@ -171,7 +177,7 @@ class ParseConvertTopology:
             raise ValueError(f"Switch {switch_id} not found on the topology")
         if "node_name" in switch["metadata"]:
             return switch["metadata"]["node_name"][:30]
-        if len(switch["data_path"]) <= 30
+        if len(switch["data_path"]) <= 30:
             return switch["data_path"]
         return switch["dpid"].replace(":", "-")
 
