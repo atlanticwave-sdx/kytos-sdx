@@ -1,10 +1,7 @@
-# pull os base image
-FROM kytos-base
+FROM amlight/kytos:latest
+MAINTAINER Italo Valcy <italo@amlight.net>
 
-# set work directory
+ARG branch_kytos_sdx=main
 
-WORKDIR /
-RUN mkdir -p /sdx_topology
-COPY ./container-kytos-sdx-topology/ /sdx_topology
-RUN for repo in sdx_topology/app; do cd ${repo}; python3 setup.py develop; cd ..; done
-RUN touch /var/log/kytos.log
+RUN --mount=source=.,target=/src/kytos-sdx,type=bind \
+    python3 -m pip install -e /src/kytos-sdx
