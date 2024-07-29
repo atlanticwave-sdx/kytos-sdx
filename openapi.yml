@@ -221,6 +221,12 @@ paths:
                 type: object
                 items:
                   $ref: '#/components/schemas/Topology'
+        '424':
+          description: Failed to convert kytos topology
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
     post:
       summary: Send the topology to SDX-LC
