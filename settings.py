@@ -9,6 +9,10 @@ EVENT_TYPES = {
     "kytos/topology.link.deleted": "admin",
     "kytos/topology.link_up": "oper",
     "kytos/topology.link_down": "oper",
+    "kytos/of_core.switch.interface.created": "admin",
+    "kytos/of_core.switch.interface.deleted": "admin",
+    "kytos/of_core.switch.interface.link_up": "oper",
+    "kytos/of_core.switch.interface.link_down": "oper",
 }
 
 # Kytos mef_eline endpoint for creating L2VPN PTP

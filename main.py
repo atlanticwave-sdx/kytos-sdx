@@ -91,6 +91,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
     @listen_to(
         "kytos/topology.link_.*",
         "kytos/topology.switch.*",
+        ".*.switch.interface.(link_up|link_down|created|deleted)",
         pool="dynamic_single"
     )
     def on_topology_event(self, event: KytosEvent):
