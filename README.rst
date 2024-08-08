@@ -60,6 +60,39 @@ The SDX Napp supports topology operations and L2VPN provisioning operations. Som
 
 	curl -s -X POST http://127.0.0.1:8181/api/kytos/sdx/topology/2.0.0
 
+- Create a L2VPN using the *old* Provisioning APIs (currently being used by SDX-LC):
+
+.. code-block:: shell
+
+	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/v1/l2vpn_ptp -d '{"name": "AMPATH_vlan_503_503", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": {"value": 501, "tag_type": 1}}, "uni_z": {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "tag": {"value": 501, "tag_type": 1}}, "dynamic_backup_path": true}'
+
+- Delete a L2VPN using the *old* Provisioning APIs (currently being used by SDX-LC):
+
+.. code-block:: shell
+
+	curl -s -X DELETE -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/v1/l2vpn_ptp -d '{"name": "AMPATH_vlan_503_503", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": {"value": 501, "tag_type": 1}}, "uni_z": {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "tag": {"value": 501, "tag_type": 1}}, "dynamic_backup_path": true}'
+
+- Create a L2VPN using the *new* Provisioning API (many examples):
+
+.. code-block:: shell
+
+	# Example 01: minimal attributes (requierd)
+	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_501_501", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": "501"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "501"}]}'
+
+	# Example 02: minimal attributes with endpoint.0 being all (frames with and without 802.1q headers)
+	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_all_503", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": "all"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "503"}]}'
+
+	# Example 03: range of VLAN
+	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_512:534_512:534", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": "512:534"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "512:534"}]}'
+
+	# Example 04: example with all possible attributes
+	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_503_503", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": "501"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "501"}], "description": "test foobar xpto aa bbb", "scheduling": {"start_time": "2024-08-07T19:55:00Z", "end_time": "2024-08-07T19:58:00Z"}, "notifications": [{"email": "user@domain.com"},{"email": "user2@domain2.com"}], "qos_metrics": {"min_bw": {"value": 5,"strict": false}, "max_delay": {"value": 150, "strict": true}}}'
+
+- Delete a L2VPN using the *new* Provisioning API:
+
+.. code-block:: shell
+
+	curl -s -X DELETE http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/ea492fd1238e4a
 
 .. TAGs
 

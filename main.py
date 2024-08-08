@@ -421,6 +421,37 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         return JSONResponse({"service_id": circuit_id}, 201)
 
+    @rest("l2vpn/1.0/{service_id}", methods=["DELETE"])
+    def delete_l2vpn(self, request: Request) -> JSONResponse:
+        """ REST to delete L2VPN."""
+        evcid = request.path_params["service_id"]
+
+        try:
+            kytos_evc_url = os.environ.get(
+                "KYTOS_EVC_URL", KYTOS_EVC_URL
+            )
+            response = requests.delete(
+                f"{kytos_evc_url.rstrip('/')}/{evcid}", timeout=30
+            )
+        except Exception as exc:
+            err = traceback.format_exc().replace("\n", ", ")
+            log.warn(f"Delete EVC failed on Kytos: {exc} - {err}")
+            raise HTTPException(
+                400, detail=f"Delete EVC failed on Kytos: {exc}"
+            ) from exc
+
+        if response.status_code == 404:
+            return JSONResponse(
+                {"description": "L2VPN Service ID provided does not exist"}, 404
+            )
+        elif response.status_code != 200:
+            log.warn(f"Delete EVC failed on Kytos: {response.text}")
+            return JSONResponse(
+                {"description": "Failed to delete L2VPN service"}, 400
+            )
+
+        return JSONResponse("L2VPN Deleted", 201)
+
     @rest("v1/l2vpn_ptp", methods=["POST"])
     def create_l2vpn_ptp(self, request: Request) -> JSONResponse:
         """ REST to create L2VPN ptp connection."""
@@ -522,7 +553,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             response = requests.delete(
                 f"{kytos_evc_url.rstrip('/')}/{evcid}", timeout=30
             )
-            assert response.status_code == 201, response.text
+            assert response.status_code == 200, response.text
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
             log.warn(f"Delete EVC failed on Kytos: {exc} - {err}")
