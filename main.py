@@ -7,6 +7,7 @@ import requests
 import traceback
 import threading
 import time
+from copy import deepcopy
 from collections import defaultdict
 
 from kytos.core import KytosNApp, log, rest
@@ -134,7 +135,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
             old_switches.pop(switch.id, None)
             switch_dict = self._topo_dict["switches"].get(switch.id)
             if not switch_dict:
-                self._topo_dict["switches"][switch.id] = switch.as_dict()
+                # XXX: deepcopy has performance impacts but it is needed here
+                # because we need to be able to compare with old values
+                self._topo_dict["switches"][switch.id] = deepcopy(switch.as_dict())
                 admin_change = True
                 continue
             if switch.is_active() != switch_dict["active"]:
@@ -150,7 +153,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 old_intfs.pop(intf.id, None)
                 intf_dict = switch_dict["interfaces"].get(intf.id)
                 if not intf_dict:
-                    switch_dict["interfaces"][intf.id] = intf.as_dict()
+                    switch_dict["interfaces"][intf.id] = deepcopy(intf.as_dict())
                     admin_change = True
                     continue
                 if intf.is_active() != intf_dict["active"]:
@@ -177,7 +180,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             old_links.pop(link.id, None)
             link_dict = self._topo_dict["links"].get(link.id)
             if not link_dict:
-                self._topo_dict["links"][link.id] = link.as_dict()
+                self._topo_dict["links"][link.id] = deepcopy(link.as_dict())
                 admin_change = True
                 continue
             if link.is_active() != link_dict["active"]:
@@ -205,6 +208,43 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 self.post_topology_to_sdxlc(self._converted_topo)
             except:
                 pass
+
+    @listen_to(
+        "kytos/topology.(switches|interfaces|links).metadata.*",
+    )
+    def on_metadata_event(self, event: KytosEvent):
+        """Handler for metadata change events."""
+        log.info(f"metadata event received {event.name}")
+        with self._topo_lock:
+            self.handle_metadata_event(event)
+
+    def handle_metadata_event(self, event: KytosEvent):
+        """Handler for metadata change events."""
+        # get obj_type and action, convert plural to singular, get object
+        # switches|interfaces|links -> switch|interface|link
+        _, obj_type, _, action = event.name.split(".")
+        obj_type = obj_type[:-1].replace("che", "ch")
+        obj = event.content[obj_type]
+        if obj_type == "switch":
+            obj_dict = self._topo_dict["switches"].get(obj.id)
+        elif obj_type == "link":
+            obj_dict = self._topo_dict["links"].get(obj.id)
+        else:
+            switch_dict = self._topo_dict["switches"].get(obj.id[:23])
+            if not switch_dict or obj.id not in switch_dict["interfaces"]:
+                log.warn(f"Metadata event for unknown obj {obj.id} event={event.name}")
+                return
+            obj_dict = switch_dict["interfaces"][obj.id]
+
+        log.info(f"handle_metadata_event {obj_type} new-metadata={obj.metadata} old={obj_dict['metadata']}")
+        if not self.try_update_metadata(obj, obj_dict["metadata"]):
+            log.info("not changed, return")
+            return
+
+        self.sdx_topology["version"] += 1
+        self.sdx_topology["timestamp"] = get_timestamp()
+        self.mongo_controller.upsert_topology(self.sdx_topology)
+        self._converted_topo = self.convert_topology_v2()
 
     def try_update_metadata(self, obj, saved_metadata):
         """Try to update metadata for an entity."""
@@ -321,7 +361,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             "uni_a": {},
             "uni_z": {},
             "dynamic_backup_path": True,
-            "metadata": {"is_sdx_l2vpn": True},
+            "metadata": {},
             "primary_constraints": {},
             "secondary_constraints": {},
         }
@@ -461,7 +501,6 @@ class Main(KytosNApp):  # pylint: disable=R0904
             "name": None,
             "uni_a": {},
             "uni_z": {},
-            "metadata": {"is_sdx_l2vpn": True},
             "dynamic_backup_path": True,
         }
 
