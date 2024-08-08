@@ -5,6 +5,9 @@ import os
 import shelve
 import requests
 import traceback
+import threading
+import time
+from collections import defaultdict
 
 from kytos.core import KytosNApp, log, rest
 from kytos.core.events import KytosEvent
@@ -14,13 +17,15 @@ from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
 from .controllers import MongoController
 from .convert_topology import ParseConvertTopology
 from .settings import (
-    EVENT_TYPES,
     KYTOS_EVC_URL,
     KYTOS_TOPOLOGY_URL,
     KYTOS_TAGS_URL,
+    TOPOLOGY_EVENT_WAIT,
 )
 from .utils import get_timestamp
 
+MIN_TIME = "0000-00-00T00:00:00Z"
+MAX_TIME = "9999-99-99T99:99:99Z"
 
 class Main(KytosNApp):  # pylint: disable=R0904
     """Main class of amlight/sdx NApp.
@@ -41,6 +46,16 @@ class Main(KytosNApp):  # pylint: disable=R0904
         self.oxpo_url = os.environ.get("OXPO_URL", "")
         self.mongo_controller = self.get_mongo_controller()
         self.sdx_topology = {}
+        # _topology, _topo_ts, _topo_wait, _topo_lock, _topo_handler_lock:
+        # those variables are used to keep track of topology updates, because
+        # kytos does not provide specific events topology#43
+        self._topology = None
+        self._converted_topo = None
+        self._topo_dict = {"switches": {}, "links": {}}
+        self._topo_ts = 0
+        self._topo_wait = TOPOLOGY_EVENT_WAIT
+        self._topo_lock = threading.Lock()
+        self._topo_handler_lock = threading.Lock()
         # mapping from IDs used by kytos and SDX
         # ex: urn:sdx:port:sax.net:Sax01:40 <--> cc:00:00:00:00:00:00:01:40
         self.kytos2sdx = {}
@@ -51,10 +66,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         """Execute once when the napp is running."""
 
     def shutdown(self):
-        """
-        Run when your NApp is unloaded.
-        If you have some cleanup procedure, insert it here.
-        """
+        """Run when your NApp is unloaded."""
 
     @staticmethod
     def get_mongo_controller():
@@ -63,21 +75,26 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
     def load_sdx_topology(self):
         self.sdx_topology = self.mongo_controller.get_topology()
-        if self.sdx_topology:
-            return
-        self.sdx_topology = {
-            "version": 1,
-            "timestamp": get_timestamp(),
-        }
+        if not self.sdx_topology:
+            self.sdx_topology = {
+                "version": 1,
+                "timestamp": get_timestamp(),
+            }
+        with self._topo_lock:
+            self._topo_dict = self.get_kytos_topology()
+            self._converted_topo = self.convert_topology_v2()
 
     @staticmethod
     def get_kytos_topology():
         """retrieve topology from API"""
-        kytos_topology = requests.get(
+        try:
+            kytos_topology = requests.get(
                 KYTOS_TOPOLOGY_URL, timeout=10).json()
-        topology = kytos_topology["topology"]
-        response = requests.get(
-            KYTOS_TAGS_URL, timeout=10)
+            topology = kytos_topology["topology"]
+            response = requests.get(
+                KYTOS_TAGS_URL, timeout=10)
+        except:
+            return {"switches": {}, "links": {}}
         if response.status_code != 200:
             return topology
         kytos_tag_ranges = response.json()
@@ -89,37 +106,146 @@ class Main(KytosNApp):  # pylint: disable=R0904
         return topology
 
     @listen_to(
-        "kytos/topology.link_.*",
-        "kytos/topology.switch.*",
-        ".*.switch.interface.(link_up|link_down|created|deleted)",
-        pool="dynamic_single"
+        "kytos/topology.updated",
+        "kytos/topology.topology_loaded",
+        pool="dynamic_single",
     )
-    def on_topology_event(self, event: KytosEvent):
-        """Handler for topology events."""
-        self.handler_on_topology_event(event)
+    def on_topology_updated_event(self, event: KytosEvent):
+        """Handler for topology updated events."""
+        self.handler_on_topology_updated_event(event)
 
-    def handler_on_topology_event(self, event: KytosEvent):
-        """Handler topology events and filter SDX events of interest."""
-        # Sanity checks
-        if not event:
+    def handler_on_topology_updated_event(self, event: KytosEvent):
+        """Handler topology updated event."""
+        with self._topo_lock:
+            self._topology = event.content["topology"]
+        if self._topo_handler_lock.locked():
             return
-        sdx_event_type = EVENT_TYPES.get(event.name)
-        if sdx_event_type:
+        with self._topo_handler_lock:
+            time.sleep(self._topo_wait)
+        with self._topo_lock:
+            self.update_topology()
+
+    def update_topology(self):
+        """Process the topology from Kytos event"""
+        admin_change = False
+        oper_change = False
+        old_switches = {k:None for k in self._topo_dict["switches"]}
+        for switch in self._topology.switches.values():
+            old_switches.pop(switch.id, None)
+            switch_dict = self._topo_dict["switches"].get(switch.id)
+            if not switch_dict:
+                self._topo_dict["switches"][switch.id] = switch.as_dict()
+                admin_change = True
+                continue
+            if switch.is_active() != switch_dict["active"]:
+                oper_change = True
+                switch_dict["active"] = switch.is_active()
+            if switch.is_enabled() != switch_dict["enabled"]:
+                admin_change = True
+                switch_dict["enabled"] = switch.is_enabled()
+            if self.try_update_metadata(switch, switch_dict["metadata"]):
+                admin_change = True
+            old_intfs = {k:None for k in switch_dict["interfaces"]}
+            for intf in switch.interfaces.values():
+                old_intfs.pop(intf.id, None)
+                intf_dict = switch_dict["interfaces"].get(intf.id)
+                if not intf_dict:
+                    switch_dict["interfaces"][intf.id] = intf.as_dict()
+                    admin_change = True
+                    continue
+                if intf.is_active() != intf_dict["active"]:
+                    oper_change = True
+                    intf_dict["active"] = intf.is_active()
+                if intf.is_enabled() != intf_dict["enabled"]:
+                    admin_change = True
+                    intf_dict["enabled"] = intf.is_enabled()
+                if self.try_update_metadata(intf, intf_dict["metadata"]):
+                    admin_change = True
+                intf_dict["tag_ranges"] = intf.tag_ranges["vlan"]
+            if old_intfs:
+                admin_change = True
+                for intf_id in old_intfs:
+                    switch_dict["interfaces"].pop(intf_id)
+        if old_switches:
+            admin_change = True
+            for sw_id in old_switches:
+                self._topo_dict["switches"].pop(sw_id)
+
+        # Links
+        old_links = {k:None for k in self._topo_dict["links"]}
+        for link in self._topology.links.values():
+            old_links.pop(link.id, None)
+            link_dict = self._topo_dict["links"].get(link.id)
+            if not link_dict:
+                self._topo_dict["links"][link.id] = link.as_dict()
+                admin_change = True
+                continue
+            if link.is_active() != link_dict["active"]:
+                oper_change = True
+                link_dict["active"] = link.is_active()
+            if link.is_enabled() != link_dict["enabled"]:
+                admin_change = True
+                link_dict["enabled"] = link.is_enabled()
+            if self.try_update_metadata(link, link_dict["metadata"]):
+                admin_change = True
+        if old_links:
+            admin_change = True
+            for link_id in old_links:
+                self._topo_dict["links"].pop(link_id)
+
+        if not admin_change and not oper_change:
+            return
+        if admin_change:
             self.sdx_topology["version"] += 1
-            self.sdx_topology["timestamp"] = get_timestamp()
-            self.mongo_controller.upsert_topology(self.sdx_topology)
-        if sdx_event_type == "oper":
+        self.sdx_topology["timestamp"] = get_timestamp()
+        self.mongo_controller.upsert_topology(self.sdx_topology)
+        self._converted_topo = self.convert_topology_v2()
+        if oper_change:
             try:
-                topology_converted = self.convert_topology_v2()
-                self.post_topology_to_sdxlc(topology_converted)
+                self.post_topology_to_sdxlc(self._converted_topo)
             except:
                 pass
+
+    def try_update_metadata(self, obj, saved_metadata):
+        """Try to update metadata for an entity."""
+        metadata_changed = False
+        metadata_interest = [
+            # link metadata
+            "link_name"
+            "availability",
+            "packet_loss",
+            "latency",
+            "residual_bandwidth",
+            # switch metadata
+            "node_name",
+            "iso3166_2_lvl4",
+            "lng",
+            "lat",
+            "address",
+            # interface metadata
+            "port_name",
+            "sdx_vlan_range",
+            "sdx_nni",
+            "mtu",
+        ]
+
+        for attr in metadata_interest:
+            old_value = saved_metadata.get(attr)
+            new_value = obj.metadata.get(attr)
+            if old_value == new_value:
+                continue
+            metadata_changed = True
+            if new_value is not None:
+                saved_metadata[attr] = new_value
+            else:
+                saved_metadata.pop(attr, None)
+        return metadata_changed
 
     def convert_topology_v2(self):
         """Convert Kytos topoloty to SDX (v2)."""
         try:
             topology_converted = ParseConvertTopology(
-                topology=self.get_kytos_topology(),
+                topology=self._topo_dict,
                 version=self.sdx_topology["version"],
                 timestamp=self.sdx_topology["timestamp"],
                 oxp_name=self.oxpo_name,
@@ -157,14 +283,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
     @rest("topology/2.0.0", methods=["GET"])
     def get_sdx_topology_v2(self, _request: Request) -> JSONResponse:
         """return sdx topology v2"""
-        topology_converted = self.convert_topology_v2()
-        return JSONResponse(topology_converted)
+        return JSONResponse(self._converted_topo)
 
     @rest("topology/2.0.0", methods=["POST"])
     def send_topology_to_sdxlc(self, _request: Request) -> JSONResponse:
         """Send the topology (v2) to SDX-LC"""
-        topology_converted = self.convert_topology_v2()
-        send_result = self.post_topology_to_sdxlc(topology_converted)
+        send_result = self.post_topology_to_sdxlc(self._converted_topo)
         return JSONResponse("Operation successful", status_code=200)
 
     @rest("l2vpn/1.0", methods=["POST"])
@@ -177,25 +301,108 @@ class Main(KytosNApp):  # pylint: disable=R0904
             msg = "Only PTP L2VPN is supported: more than 2 endpoints provided"
             log.warn(f"EVC creation failed ({msg}). request={content}")
             return JSONResponse({"description": msg}, 402)
+        if "state" in content:
+            msg = "Attribute 'state' not supported for L2VPN creation"
+            log.warn(f"EVC creation failed ({msg}). request={content}")
+            return JSONResponse({"description": msg}, 422)
+        sched_start = content.get("scheduling", {}).get("start_time", MIN_TIME)
+        sched_end = content.get("scheduling", {}).get("end_time", MAX_TIME)
+        if sched_start >= sched_end:
+            msg = "Invalid scheduling: end_time must be greater than start_time"
+            log.warn(f"EVC creation failed ({msg}). request={content}")
+            return JSONResponse({"description": msg}, 411)
+        if "max_number_oxps" in content.get("qos_metrics", {}):
+            msg = "Invalid qos_metrics.max_number_oxps for OXP"
+            log.warn(f"EVC creation failed ({msg}). request={content}")
+            return JSONResponse({"description": msg}, 422)
 
         evc_dict = {
             "name": content["name"],
             "uni_a": {},
             "uni_z": {},
             "dynamic_backup_path": True,
+            "metadata": {},
+            "primary_constraints": {},
+            "secondary_constraints": {},
         }
 
-        for idx, uni in {0: "uni_a", 1: "uni_z"}:
+        for idx, uni in {0: "uni_a", 1: "uni_z"}.items():
             sdx_id = content["endpoints"][idx]["port_id"]
             kytos_id = self.sdx2kytos.get(sdx_id)
             if not sdx_id or not kytos_id:
                 msg = f"Invalid value for endpoints.{idx} ({sdx_id})"
                 log.warn(f"EVC creation failed: {msg}. request={content}")
-                return JSONResponse({"result": msg}, 400)
+                return JSONResponse({"description": msg}, 400)
             evc_dict[uni]["interface_id"] = kytos_id
+            # sdx_vlan: some conversion from sdx -> kytos must be done for VLAN
+            # "xx" -> xx: VLAN ID integer
+            # "all" -> <no-tag>: on Kytos that would be a EPL (no tag)
+            # "any" -> Not Supported! the OXPO wont choose the VLAN, not supported
+            # "untagged" -> untagged: no conversion
+            # "xx:yy" -> [xx, yy]: VLAN range
+            sdx_vlan = content["endpoints"][idx]["vlan"]
+            if sdx_vlan.isdigit():
+                sdx_vlan = int(sdx_vlan)
+                if sdx_vlan < 1 or sdx_vlan > 4095:
+                    msg = f"Invalid vlan on endpoints.{idx} (0 > vlan < 4096)"
+                    log.warn(f"EVC creation failed: {msg}. request={content}")
+                    return JSONResponse({"description": msg}, 422)
+            elif sdx_vlan == "all":
+                continue
+            elif sdx_vlan == "any":
+                msg = f"Invalid vlan 'any': not supported on endpoints.{idx}"
+                log.warn(f"EVC creation failed: {msg}. request={content}")
+                return JSONResponse({"description": msg}, 422)
+            elif sdx_vlan == "untagged":
+                # nothing to do
+                pass
+            else:  # assuming vlan range
+                try:
+                    start, end = sdx_vlan.split(":")
+                    sdx_vlan = [int(start), int(end)]
+                    assert sdx_vlan[0] < sdx_vlan[1]
+                except:
+                    msg = f"Invalid vlan range on endpoints.{idx} ({sdx_vlan})"
+                    log.warn(f"EVC creation failed: {msg}. request={content}")
+                    return JSONResponse({"description": msg}, 422)
             evc_dict[uni]["tag"] = {
-                "value": content["endpoints"][idx]["vlan"],
+                "tag_type": "vlan",
+                "value": sdx_vlan,
             }
+
+        if "description" in content:
+            evc_dict["metadata"]["sdx_description"] = content["description"]
+        if "notifications" in content:
+            evc_dict["metadata"]["sdx_notifications"] = content["notifications"]
+        if sched_start != MIN_TIME:
+            evc_dict["circuit_scheduler"] = [
+                {"date": sched_start, "action": "create"}
+            ]
+        if sched_end != MAX_TIME:
+            evc_dict.setdefault("circuit_scheduler", [])
+            evc_dict["circuit_scheduler"].append(
+                {"date": sched_end, "action": "remove"}
+            )
+        min_bw = content.get("qos_metrics", {}).get("min_bw")
+        if min_bw:
+            metrict_type = "mandatory_metrics" if min_bw.get("strict", False) else "flexible_metrics"
+            evc_dict["primary_constraints"].setdefault(metrict_type, {})
+            evc_dict["primary_constraints"][metrict_type]["bandwidth"] = min_bw["value"]
+            evc_dict["secondary_constraints"].setdefault(metrict_type, {})
+            evc_dict["secondary_constraints"][metrict_type]["bandwidth"] = min_bw["value"]
+        max_delay = content.get("qos_metrics", {}).get("max_delay")
+        if max_delay:
+            metrict_type = "mandatory_metrics" if max_delay.get("strict", False) else "flexible_metrics"
+            evc_dict["primary_constraints"].setdefault(metrict_type, {})
+            evc_dict["primary_constraints"][metrict_type]["delay"] = max_delay["value"]
+            evc_dict["secondary_constraints"].setdefault(metrict_type, {})
+            evc_dict["secondary_constraints"][metrict_type]["delay"] = min_bw["value"]
+
+        # TODO: error handling
+        # 401: Not Authorized
+        # 409: L2VPN Service already exists.
+        # 410: Can't fulfill the strict QoS requirements
+        # 411: Scheduling not possible
 
         try:
             kytos_evc_url = os.environ.get(
@@ -206,15 +413,13 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     json=evc_dict,
                     timeout=30)
             assert response.status_code == 201, response.text
+            circuit_id = response.json()["circuit_id"]
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
             log.warn(f"EVC creation failed: {exc} - {err}")
-            raise HTTPException(
-                    400,
-                    detail=f"Request to Kytos failed: {exc}"
-                ) from exc
+            return JSONResponse({"description": "L2VPN creation failed: check logs"}, 400)
 
-        return JSONResponse(response.json(), 200)
+        return JSONResponse({"service_id": circuit_id}, 201)
 
     @rest("v1/l2vpn_ptp", methods=["POST"])
     def create_l2vpn_ptp(self, request: Request) -> JSONResponse:
