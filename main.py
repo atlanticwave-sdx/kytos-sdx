@@ -321,7 +321,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             "uni_a": {},
             "uni_z": {},
             "dynamic_backup_path": True,
-            "metadata": {},
+            "metadata": {"is_sdx_l2vpn": True},
             "primary_constraints": {},
             "secondary_constraints": {},
         }
@@ -461,6 +461,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             "name": None,
             "uni_a": {},
             "uni_z": {},
+            "metadata": {"is_sdx_l2vpn": True},
             "dynamic_backup_path": True,
         }
 
