@@ -35,14 +35,15 @@ class MongoController:
 
     def get_topology(self) -> Dict:
         """Get latest SDX Topology."""
-        return self.db.pipelines.find_one({"_id": "latest"}) or {}
+        return self.db.sdx_info.find_one({"_id": "topology"}) or {}
 
     def upsert_topology(self, sdx_topology: Dict) -> Optional[Dict]:
         """Update or insert an EVC"""
         utc_now = datetime.utcnow()
         sdx_topology["updated_at"] = utc_now
-        updated = self.db.evcs.find_one_and_update(
-            {"_id": "latest"},
+        sdx_topology.pop("inserted_at", None)
+        updated = self.db.sdx_info.find_one_and_update(
+            {"_id": "topology"},
             {
                 "$set": sdx_topology,
                 "$setOnInsert": {"inserted_at": utc_now},
