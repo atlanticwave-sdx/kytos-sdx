@@ -55,7 +55,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
         self._converted_topo = None
         self._topo_dict = {"switches": {}, "links": {}}
         self._topo_ts = 0
-        self._topo_wait = TOPOLOGY_EVENT_WAIT
+        self._topo_max_wait = TOPOLOGY_EVENT_WAIT
+        self._topo_wait = 1
         self._topo_lock = threading.Lock()
         self._topo_handler_lock = threading.Lock()
         # mapping from IDs used by kytos and SDX
@@ -126,9 +127,15 @@ class Main(KytosNApp):  # pylint: disable=R0904
             self._topology = event.content["topology"]
             self._topology_updated_at = event.timestamp
         if self._topo_handler_lock.locked():
+            self._topo_wait = min(self._topo_wait+1, self._topo_max_wait)
             return
+        self._topo_wait = 1
         with self._topo_handler_lock:
-            time.sleep(self._topo_wait)
+            waited = 0
+            step_wait = 0.2
+            while waited <= self._topo_wait:
+                waited += step_wait
+                time.sleep(step_wait)
         with self._topo_lock:
             self.update_topology()
 
