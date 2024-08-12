@@ -51,6 +51,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         # those variables are used to keep track of topology updates, because
         # kytos does not provide specific events topology#43
         self._topology = None
+        self._topology_updated_at = None
         self._converted_topo = None
         self._topo_dict = {"switches": {}, "links": {}}
         self._topo_ts = 0
@@ -109,7 +110,6 @@ class Main(KytosNApp):  # pylint: disable=R0904
     @listen_to(
         "kytos/topology.updated",
         "kytos/topology.topology_loaded",
-        pool="dynamic_single",
     )
     def on_topology_updated_event(self, event: KytosEvent):
         """Handler for topology updated events."""
@@ -118,7 +118,13 @@ class Main(KytosNApp):  # pylint: disable=R0904
     def handler_on_topology_updated_event(self, event: KytosEvent):
         """Handler topology updated event."""
         with self._topo_lock:
+            if (
+                self._topology_updated_at
+                and self._topology_updated_at > event.timestamp
+            ):
+                return
             self._topology = event.content["topology"]
+            self._topology_updated_at = event.timestamp
         if self._topo_handler_lock.locked():
             return
         with self._topo_handler_lock:
@@ -214,7 +220,6 @@ class Main(KytosNApp):  # pylint: disable=R0904
     )
     def on_metadata_event(self, event: KytosEvent):
         """Handler for metadata change events."""
-        log.info(f"metadata event received {event.name}")
         with self._topo_lock:
             self.handle_metadata_event(event)
 
@@ -236,9 +241,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 return
             obj_dict = switch_dict["interfaces"][obj.id]
 
-        log.info(f"handle_metadata_event {obj_type} new-metadata={obj.metadata} old={obj_dict['metadata']}")
         if not self.try_update_metadata(obj, obj_dict["metadata"]):
-            log.info("not changed, return")
             return
 
         self.sdx_topology["version"] += 1
