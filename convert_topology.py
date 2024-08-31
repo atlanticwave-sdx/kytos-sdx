@@ -225,10 +225,10 @@ class ParseConvertTopology:
 
         sdx_link["name"] = self.get_kytos_link_label(kytos_link)
         sdx_link["id"] = f"urn:sdx:link:{self.oxp_url}:{sdx_link['name']}"
-        sdx_link["ports"] = [
+        sdx_link["ports"] = sorted([
             self.get_port_urn(kytos_link["endpoint_a"]),
             self.get_port_urn(kytos_link["endpoint_b"]),
-        ]
+        ])
         sdx_link["type"] = "intra"
         sdx_link["bandwidth"] = self.get_link_port_speed(
             str(
