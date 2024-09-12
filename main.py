@@ -18,6 +18,9 @@ from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
 from .controllers import MongoController
 from .convert_topology import ParseConvertTopology
 from .settings import (
+    SDXLC_URL,
+    OXPO_NAME,
+    OXPO_URL,
     KYTOS_EVC_URL,
     KYTOS_TOPOLOGY_URL,
     KYTOS_TAGS_URL,
@@ -42,9 +45,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         So, if you have any setup routine, insert it here.
         """
-        self.sdxlc_url = os.environ.get("SDXLC_URL", "")
-        self.oxpo_name = os.environ.get("OXPO_NAME", "")
-        self.oxpo_url = os.environ.get("OXPO_URL", "")
+        self.sdxlc_url = os.environ.get("SDXLC_URL", SDXLC_URL)
+        self.oxpo_name = os.environ.get("OXPO_NAME", OXPO_NAME)
+        self.oxpo_url = os.environ.get("OXPO_URL", OXPO_URL)
         self.mongo_controller = self.get_mongo_controller()
         self.sdx_topology = {}
         # _topology, _topo_ts, _topo_wait, _topo_lock, _topo_handler_lock:
@@ -159,6 +162,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
             if switch.is_enabled() != switch_dict["enabled"]:
                 admin_change = True
                 switch_dict["enabled"] = switch.is_enabled()
+            if self.try_update_attrs(switch, switch_dict):
+                admin_change = True
             if self.try_update_metadata(switch, switch_dict["metadata"]):
                 admin_change = True
             old_intfs = {k:None for k in switch_dict["interfaces"]}
@@ -175,6 +180,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 if intf.is_enabled() != intf_dict["enabled"]:
                     admin_change = True
                     intf_dict["enabled"] = intf.is_enabled()
+                if self.try_update_attrs(intf, intf_dict):
+                    admin_change = True
                 if self.try_update_metadata(intf, intf_dict["metadata"]):
                     admin_change = True
                 intf_dict["tag_ranges"] = intf.tag_ranges["vlan"]
@@ -202,6 +209,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
             if link.is_enabled() != link_dict["enabled"]:
                 admin_change = True
                 link_dict["enabled"] = link.is_enabled()
+            if self.try_update_attrs(link, link_dict):
+                admin_change = True
             if self.try_update_metadata(link, link_dict["metadata"]):
                 admin_change = True
         if old_links:
@@ -290,6 +299,30 @@ class Main(KytosNApp):  # pylint: disable=R0904
             else:
                 saved_metadata.pop(attr, None)
         return metadata_changed
+
+    def try_update_attrs(self, obj, saved_dict):
+        """Try to update attribute for an object."""
+        attr_changed = False
+        attr_interest = [
+            # link attrs
+            # endpoint?
+            # switch attrs
+            "name",
+            "data_path",
+            # interface attrs
+            "nni",
+            "speed",
+            "link",
+        ]
+        obj_dict = obj.as_dict()
+        for attr in attr_interest:
+            old_value = saved_dict.get(attr)
+            new_value = obj_dict.get(attr)
+            if old_value == new_value:
+                continue
+            attr_changed = True
+            saved_dict[attr] = new_value
+        return attr_changed
 
     def convert_topology_v2(self):
         """Convert Kytos topoloty to SDX (v2)."""

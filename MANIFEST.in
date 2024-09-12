@@ -1,2 +1,2 @@
 include kytos.json
-recursive-include requirements *
+include requirements/run.txt

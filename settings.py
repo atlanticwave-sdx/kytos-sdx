@@ -1,5 +1,17 @@
 """Module with the Constants used in the kytos/sdx."""
 
+# SDXLC_URL: URL to send the topology to SDX-LC
+# you can change the value below or override it using environment variable
+SDXLC_URL = "http://127.0.0.1:8080/SDX-LC/2.0.0/topology"
+
+# OXPO_NAME: Open Exchange Point Name
+# you can change the value below or override it using environment variable
+OXPO_NAME = "TestOXP"
+
+# OXPO_URL: OXP URL
+# you can change the value below or override it using environment variable
+OXPO_URL = "testoxp.net"
+
 # TOPOLOGY_EVENT_WAIT: time to wait while hanlde topology update
 # events to try to group them
 TOPOLOGY_EVENT_WAIT=5
