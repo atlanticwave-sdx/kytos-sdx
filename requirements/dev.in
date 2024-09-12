@@ -1,5 +1,4 @@
 -e git+https://github.com/kytos-ng/python-openflow.git#egg=python-openflow
--e git+https://github.com/kytos-ng/kytos.git#egg=kytos
--e git+https://github.com/kytos-ng/topology.git#egg=kytos_topology
+-e git+https://github.com/kytos-ng/kytos.git#egg=kytos[dev]
 -e .[dev]
-black>=21.10b0 # 21.x requires click>=7.1.2
+pytest-unordered
