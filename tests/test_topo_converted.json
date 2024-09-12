@@ -1,0 +1,369 @@
+{
+  "id": "urn:sdx:topology:testoxp.net",
+  "name": "TestOXP",
+  "version": 1,
+  "model_version": "2.0.0",
+  "timestamp": "2024-07-18T15:33:12Z",
+  "nodes": [
+    {
+      "name": "TestSw1",
+      "id": "urn:sdx:node:testoxp.net:TestSw1",
+      "location": {
+        "address": "Miami",
+        "latitude": 25.77,
+        "longitude": -80.19,
+        "iso3166_2_lvl4": "US-FL",
+        "private": []
+      },
+      "ports": [
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw1:1",
+          "name": "TestSw1-eth1",
+          "node": "urn:sdx:node:testoxp.net:TestSw1",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:link:testoxp.net:TestSw1/1_TestSw2/1",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw1:40",
+          "name": "TestSw1-eth40",
+          "node": "urn:sdx:node:testoxp.net:TestSw1",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:port:sax.net:Sax01:40",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw1:50",
+          "name": "TestSw1-eth50",
+          "node": "urn:sdx:node:testoxp.net:TestSw1",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw1:2",
+          "name": "TestSw1-eth2",
+          "node": "urn:sdx:node:testoxp.net:TestSw1",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:link:testoxp.net:TestSw1/2_TestSw3/2",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        }
+      ],
+      "status": "up",
+      "state": "enabled"
+    },
+    {
+      "name": "TestSw2",
+      "id": "urn:sdx:node:testoxp.net:TestSw2",
+      "location": {
+        "address": "BocaRaton",
+        "latitude": 26.38,
+        "longitude": -80.11,
+        "iso3166_2_lvl4": "US-FL",
+        "private": []
+      },
+      "ports": [
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw2:1",
+          "name": "TestSw2-eth1",
+          "node": "urn:sdx:node:testoxp.net:TestSw2",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:link:testoxp.net:TestSw1/1_TestSw2/1",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw2:50",
+          "name": "TestSw2-eth50",
+          "node": "urn:sdx:node:testoxp.net:TestSw2",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw2:40",
+          "name": "TestSw2-eth40",
+          "node": "urn:sdx:node:testoxp.net:TestSw2",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:port:sax.net:Sax02:40",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw2:3",
+          "name": "TestSw2-eth3",
+          "node": "urn:sdx:node:testoxp.net:TestSw2",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:link:testoxp.net:TestSw2/3_TestSw3/3",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        }
+      ],
+      "status": "up",
+      "state": "enabled"
+    },
+    {
+      "name": "TestSw3",
+      "id": "urn:sdx:node:testoxp.net:TestSw3",
+      "location": {
+        "address": "Jacksonville",
+        "latitude": 30.27,
+        "longitude": -81.68,
+        "iso3166_2_lvl4": "US-FL",
+        "private": []
+      },
+      "ports": [
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw3:2",
+          "name": "TestSw3-eth2",
+          "node": "urn:sdx:node:testoxp.net:TestSw3",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:link:testoxp.net:TestSw1/2_TestSw3/2",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw3:50",
+          "name": "TestSw3-eth50",
+          "node": "urn:sdx:node:testoxp.net:TestSw3",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        },
+        {
+          "id": "urn:sdx:port:testoxp.net:TestSw3:3",
+          "name": "TestSw3-eth3",
+          "node": "urn:sdx:node:testoxp.net:TestSw3",
+          "type": "10GE",
+          "status": "up",
+          "state": "enabled",
+          "mtu": 1500,
+          "nni": "urn:sdx:link:testoxp.net:TestSw2/3_TestSw3/3",
+          "services": {
+            "l2vpn-ptp": {
+              "vlan_range": [
+                [
+                  1,
+                  4095
+                ]
+              ]
+            }
+          },
+          "private": [
+            "status"
+          ]
+        }
+      ],
+      "status": "up",
+      "state": "enabled"
+    }
+  ],
+  "links": [
+    {
+      "id": "urn:sdx:link:testoxp.net:TestSw1/2_TestSw3/2",
+      "name": "TestSw1/2_TestSw3/2",
+      "ports": [
+        "urn:sdx:port:testoxp.net:TestSw1:2",
+        "urn:sdx:port:testoxp.net:TestSw3:2"
+      ],
+      "type": "intra",
+      "bandwidth": 10,
+      "residual_bandwidth": 100,
+      "latency": 0,
+      "packet_loss": 0,
+      "availability": 0,
+      "status": "up",
+      "state": "enabled",
+      "private": [
+        "packet_loss"
+      ]
+    },
+    {
+      "id": "urn:sdx:link:testoxp.net:TestSw2/3_TestSw3/3",
+      "name": "TestSw2/3_TestSw3/3",
+      "ports": [
+        "urn:sdx:port:testoxp.net:TestSw2:3",
+        "urn:sdx:port:testoxp.net:TestSw3:3"
+      ],
+      "type": "intra",
+      "bandwidth": 10,
+      "residual_bandwidth": 100,
+      "latency": 0,
+      "packet_loss": 0,
+      "availability": 0,
+      "status": "up",
+      "state": "enabled",
+      "private": [
+        "packet_loss"
+      ]
+    },
+    {
+      "id": "urn:sdx:link:testoxp.net:TestSw1/1_TestSw2/1",
+      "name": "TestSw1/1_TestSw2/1",
+      "ports": [
+        "urn:sdx:port:testoxp.net:TestSw1:1",
+        "urn:sdx:port:testoxp.net:TestSw2:1"
+      ],
+      "type": "intra",
+      "bandwidth": 10,
+      "residual_bandwidth": 100,
+      "latency": 0,
+      "packet_loss": 0,
+      "availability": 0,
+      "status": "up",
+      "state": "enabled",
+      "private": [
+        "packet_loss"
+      ]
+    }
+  ],
+  "services": [
+    "l2vpn-ptp"
+  ]
+}

@@ -1,67 +1,55 @@
-"""
-SDX Topology main Unit test
-"""
+"""Test Main methods."""
+import asyncio
 from unittest.mock import MagicMock, patch
-from dataclasses import dataclass
-from napps.kytos.sdx_topology.main import Main as AppMain
-from .helpers import get_controller_mock, get_test_client
+from pytest_unordered import unordered
+
+from kytos.core.events import KytosEvent
+from kytos.lib.helpers import get_controller_mock, get_test_client
+
+# pylint: disable=import-error
+from napps.kytos.sdx.main import Main
+from tests.helpers import get_topology, get_converted_topology
 
 
-@dataclass
-class TestMain(AppMain):
-    """Test the Main class."""
-    # pylint: disable=too-many-public-methods, protected-access,C0302
-    napp = AppMain(get_controller_mock())
+# pylint: disable=protected-access
+class TestMain:
+    """Tests for the Main class."""
 
     def setup_method(self):
         """Execute steps before each tests."""
-        patch('kytos.core.helpers.run_on_thread', lambda x: x).start()
-        # pylint: disable=W0201
-        controller = get_controller_mock()
-        self.napp = AppMain(controller)
-        self.api_client = get_test_client(controller, self.napp)
-        self.base_endpoint = 'kytos/sdx_topology/v1'
+        Main.get_mongo_controller = MagicMock()
+        self.controller = get_controller_mock()
+        self.napp = Main(self.controller)
+        #self.napp.oxpo_name = "Ampath-OXP"
+        #self.napp.oxpo_url = "ampath.net"
+        self.api_client = get_test_client(self.controller, self.napp)
+        self.endpoint = "kytos/sdx"
 
-    def test_get_event_listeners(self):
-        """Verify all event listeners registered."""
-        expected_events = [
-                "kytos/topology.switch.enabled",
-                "kytos/topology.switch.disabled",
-                "kytos/topology.switch.metadata.added",
-                "kytos/topology.interface.metadata.added",
-                "kytos/topology.link.metadata.added",
-                "kytos/topology.switch.metadata.removed",
-                "kytos/topology.interface.metadata.removed",
-                "kytos/topology.link.metadata.removed",
-                'kytos/topology.notify_link_up_if_status',
-                'kytos/core.shutdown',
-                'kytos/core.shutdown.kytos/topology',
-                '.*.topo_controller.upsert_switch',
-                '.*.of_lldp.network_status.updated',
-                '.*.switch.interfaces.created',
-                '.*.topology.switch.interface.created',
-                '.*.switch.interface.deleted',
-                '.*.switch.port.created',
-                'topology.interruption.start',
-                'topology.interruption.end',
-                "kytos/topology.link_up",
-                "kytos/topology.link_down",
-                '.*.connection.lost',
-                '.*.switch.interface.link_down',
-                '.*.switch.interface.link_up',
-                '.*.switch.(new|reconnected)'
-                ]
-        actual_events = self.napp.listeners()
-        assert sorted(expected_events) == sorted(actual_events)
+    def test_update_topology_success_case(self):
+        """Test update topology method to success case."""
+        topology = get_topology()
+        expected = get_converted_topology()
+        self.napp.sdx_topology = {
+            "version": 1, "timestamp": "2024-07-18T15:33:12Z"
+        }
+        event = KytosEvent(
+            name="kytos.topology.updated", content={"topology": topology}
+        )
+        self.napp.handler_on_topology_updated_event(event)
+        assert self.napp._topology == topology
+        converted_topo = self.napp._converted_topo
+        for node in converted_topo["nodes"]:
+            node["ports"] = unordered(node["ports"])
+        assert unordered(converted_topo["nodes"]) == expected["nodes"]
+        assert unordered(converted_topo["links"]) == expected["links"]
+        for attr in ["name", "id", "model_version", "services"]:
+            assert attr in converted_topo
+            assert converted_topo[attr] == expected[attr]
 
-
-def test_setup():
-    """Replace the '__init__' method for the KytosNApp subclass."""
-    TestMain().main.setup()
-    assert TestMain().main.shelve_loaded is False
-
-
-def test_create_update_topology():
-    """ Function that will take care of create or update sdx topology """
-    response = TestMain().main.create_update_topology()
-    assert "id" in response
+    async def test_get_topology_response(self, monkeypatch):
+        """Test shortest path."""
+        self.napp.controller.loop = asyncio.get_running_loop()
+        self.napp._converted_topo = {}
+        response = await self.api_client.get(f"{self.endpoint}/topology/2.0.0")
+        assert response.status_code == 200
+        assert response.json() == {}
