@@ -1,6 +1,8 @@
 """Test Main methods."""
+
 import asyncio
 from unittest.mock import MagicMock, patch
+
 from pytest_unordered import unordered
 
 from kytos.core.events import KytosEvent
@@ -8,7 +10,7 @@ from kytos.lib.helpers import get_controller_mock, get_test_client
 
 # pylint: disable=import-error
 from napps.kytos.sdx.main import Main
-from tests.helpers import get_topology, get_converted_topology
+from napps.kytos.sdx.tests.helpers import get_converted_topology, get_topology
 
 
 # pylint: disable=protected-access
@@ -20,18 +22,15 @@ class TestMain:
         Main.get_mongo_controller = MagicMock()
         self.controller = get_controller_mock()
         self.napp = Main(self.controller)
-        #self.napp.oxpo_name = "Ampath-OXP"
-        #self.napp.oxpo_url = "ampath.net"
         self.api_client = get_test_client(self.controller, self.napp)
         self.endpoint = "kytos/sdx"
 
-    def test_update_topology_success_case(self):
+    @patch("time.sleep", return_value=None)
+    def test_update_topology_success_case(self, _):
         """Test update topology method to success case."""
         topology = get_topology()
         expected = get_converted_topology()
-        self.napp.sdx_topology = {
-            "version": 1, "timestamp": "2024-07-18T15:33:12Z"
-        }
+        self.napp.sdx_topology = {"version": 1, "timestamp": "2024-07-18T15:33:12Z"}
         event = KytosEvent(
             name="kytos.topology.updated", content={"topology": topology}
         )
@@ -46,7 +45,7 @@ class TestMain:
             assert attr in converted_topo
             assert converted_topo[attr] == expected[attr]
 
-    async def test_get_topology_response(self, monkeypatch):
+    async def test_get_topology_response(self):
         """Test shortest path."""
         self.napp.controller.loop = asyncio.get_running_loop()
         self.napp._converted_topo = {}

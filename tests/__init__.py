@@ -1,4 +1,5 @@
 """NApp Tests."""
+
 import os
 import sys
 from pathlib import Path
