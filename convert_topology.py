@@ -3,6 +3,7 @@ Main class of kytos/sdx Kytos Network Application.
 
 SDX API
 """
+import re
 
 
 class ParseConvertTopology:

@@ -14,7 +14,7 @@ OXPO_URL = "testoxp.net"
 
 # TOPOLOGY_EVENT_WAIT: time to wait while hanlde topology update
 # events to try to group them
-TOPOLOGY_EVENT_WAIT=5
+TOPOLOGY_EVENT_WAIT = 5
 
 # Kytos mef_eline endpoint for creating L2VPN PTP
 KYTOS_EVC_URL = "http://127.0.0.1:8181/api/kytos/mef_eline/v2/evc/"
