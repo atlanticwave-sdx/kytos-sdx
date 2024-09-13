@@ -31,14 +31,10 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
+
       - name: Install Tox
         run: |
           pip install tox coverage
-
-      - name: Lint
-        run: |
-          # run only linter
-          tox -e lint
 
       - name: Run tests
         run: |

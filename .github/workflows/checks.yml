@@ -1,0 +1,36 @@
+# Run some code checks with GitHub Actions.
+
+name: Code checks
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Install Tox
+        run: |
+          pip install tox coverage
+
+      - name: Lint
+        run: |
+          # run only linter
+          tox -e lint
+
+      - name: Lint kytos-sdx Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
