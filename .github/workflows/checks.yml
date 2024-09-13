@@ -25,6 +25,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: 'pip'  # cache pip dependencies
+        run: python3 setup develop
 
       - name: Install dependencies
         run: |
