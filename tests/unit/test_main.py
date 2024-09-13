@@ -25,7 +25,7 @@ class TestMain:
         self.api_client = get_test_client(self.controller, self.napp)
         self.endpoint = "kytos/sdx"
 
-    @patch('time.sleep', return_value=None)
+    @patch("time.sleep", return_value=None)
     def test_update_topology_success_case(self, _):
         """Test update topology method to success case."""
         topology = get_topology()

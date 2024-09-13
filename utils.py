@@ -1,4 +1,5 @@
 """SDX topology Utility functions"""
+
 from datetime import datetime, timezone
 
 
