@@ -88,6 +88,14 @@ The SDX Napp supports topology operations and L2VPN provisioning operations. Som
 	# Example 04: example with all possible attributes
 	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_503_503", "endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "501"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "501"}], "description": "test foobar xpto aa bbb", "scheduling": {"start_time": "2024-08-07T19:55:00Z", "end_time": "2024-08-07T19:58:00Z"}, "notifications": [{"email": "user@domain.com"},{"email": "user2@domain2.com"}], "qos_metrics": {"min_bw": {"value": 5,"strict": false}, "max_delay": {"value": 150, "strict": true}}}'
 
+- Editing a L2VPN using the *new* Provisioning API:
+
+.. code-block:: shell
+
+        curl -H 'Content-type: application/json' -X PATCH http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/f9ecff1309d845 -d '{"endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "301"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "4095"}], "description": "this is a l2vpn test"}'
+
+The example above changes the endpoints and the description of a L2VPN. Fields that can be changed: endpoints, description, scheduling, qos_metrics, name. Note about endpoints: if one endpoint has to be changed, you must provide both endpoints.
+
 - Delete a L2VPN using the *new* Provisioning API:
 
 .. code-block:: shell
