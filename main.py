@@ -395,14 +395,19 @@ class Main(KytosNApp):  # pylint: disable=R0904
         """REST to create L2VPN connection."""
         content = get_json_or_400(request, self.controller.loop)
 
+        # Sanity check: only supports 2 endpoints (PTP L2VPN)
+        if len(content["endpoints"]) != 2:
+            msg = "Only PTP L2VPN is supported: expecting exactly 2 endpoints"
+            log.warn(f"EVC creation failed: {msg}. request={content}")
+            return JSONResponse({"description": msg}, 402)
+
         evc_dict, code, msg = self.parse_evc(content)
         if not evc_dict:
             log.warn(f"EVC creation failed: {msg}. request={content}")
             return JSONResponse({"description": msg}, code)
 
         try:
-            kytos_evc_url = os.environ.get("KYTOS_EVC_URL", KYTOS_EVC_URL)
-            response = requests.post(kytos_evc_url, json=evc_dict, timeout=30)
+            response = requests.post(KYTOS_EVC_URL, json=evc_dict, timeout=30)
             assert response.status_code == 201, response.text
             circuit_id = response.json()["circuit_id"]
         except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -414,16 +419,43 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         return JSONResponse({"service_id": circuit_id}, 201)
 
+    @rest("l2vpn/1.0/{service_id}", methods=["PATCH"])
+    def update_l2vpn(self, request: Request) -> JSONResponse:
+        """REST to update L2VPN connection."""
+        evcid = request.path_params["service_id"]
+        content = get_json_or_400(request, self.controller.loop)
+
+        evc_dict, code, msg = self.parse_evc(content)
+        if not evc_dict:
+            log.warn(f"EVC update failed: {msg}. request={content}")
+            return JSONResponse({"description": msg}, code)
+
+        # we handle metadata differently otherwise Kytos would overwrite it
+        metadata = evc_dict.pop("metadata", {})
+
+        try:
+            if evc_dict:
+                response = requests.patch(
+                    f"{KYTOS_EVC_URL}{evcid}", json=evc_dict, timeout=30
+                )
+                assert response.status_code == 200, response.text
+            if metadata:
+                response = requests.post(
+                    f"{KYTOS_EVC_URL}{evcid}/metadata", json=metadata, timeout=30
+                )
+                assert response.status_code == 201, response.text
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            err = traceback.format_exc().replace("\n", ", ")
+            log.warn(f"EVC creation failed: {exc} - {err}")
+            return JSONResponse(
+                {"description": "L2VPN editing failed: check logs"}, 400
+            )
+
+        return JSONResponse("L2VPN Service Modified", 201)
+
     # pylint: disable=too-many-return-statements, too-many-branches
     def parse_evc(self, content):
         """Parse content request into EVC dict."""
-        # Sanity check: only supports 2 endpoints (PTP L2VPN)
-        if len(content["endpoints"]) != 2:
-            return (
-                None,
-                402,
-                "Only PTP L2VPN is supported: more than 2 endpoints provided",
-            )
         if "state" in content:
             return None, 422, "Attribute 'state' not supported for L2VPN creation"
         sched_start = content.get("scheduling", {}).get("start_time", MIN_TIME)
@@ -437,34 +469,15 @@ class Main(KytosNApp):  # pylint: disable=R0904
         if "max_number_oxps" in content.get("qos_metrics", {}):
             return None, 422, "Invalid qos_metrics.max_number_oxps for OXP"
 
-        evc_dict = {
-            "name": content["name"],
-            "uni_a": {},
-            "uni_z": {},
-            "dynamic_backup_path": True,
-            "metadata": {},
-            "primary_constraints": {},
-            "secondary_constraints": {},
-        }
+        evc_dict = {}
 
-        for idx, uni in {0: "uni_a", 1: "uni_z"}.items():
-            sdx_id = content["endpoints"][idx]["port_id"]
-            kytos_id = self.sdx2kytos.get(sdx_id)
-            if not sdx_id or not kytos_id:
-                return None, 400, f"Invalid value for endpoints.{idx} ({sdx_id})"
-            evc_dict[uni]["interface_id"] = kytos_id
-            sdx_vlan, msg = self.parse_vlan(content["endpoints"][idx]["vlan"])
-            if sdx_vlan is None:
-                return None, msg
-            if sdx_vlan:
-                evc_dict[uni]["tag"] = {
-                    "tag_type": "vlan",
-                    "value": sdx_vlan,
-                }
-
+        if "name" in content:
+            evc_dict["name"] = content["name"]
         if "description" in content:
+            evc_dict.setdefault("metadata", {})
             evc_dict["metadata"]["sdx_description"] = content["description"]
         if "notifications" in content:
+            evc_dict.setdefault("metadata", {})
             evc_dict["metadata"]["sdx_notifications"] = content["notifications"]
         if sched_start != MIN_TIME:
             evc_dict["circuit_scheduler"] = [{"date": sched_start, "action": "create"}]
@@ -480,6 +493,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 if min_bw.get("strict", False)
                 else "flexible_metrics"
             )
+            evc_dict.setdefault("primary_constraints", {})
+            evc_dict.setdefault("secondary_constraints", {})
             evc_dict["primary_constraints"].setdefault(metrict_type, {})
             evc_dict["primary_constraints"][metrict_type]["bandwidth"] = min_bw["value"]
             evc_dict["secondary_constraints"].setdefault(metrict_type, {})
@@ -493,10 +508,30 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 if max_delay.get("strict", False)
                 else "flexible_metrics"
             )
+            evc_dict.setdefault("primary_constraints", {})
+            evc_dict.setdefault("secondary_constraints", {})
             evc_dict["primary_constraints"].setdefault(metrict_type, {})
             evc_dict["primary_constraints"][metrict_type]["delay"] = max_delay["value"]
             evc_dict["secondary_constraints"].setdefault(metrict_type, {})
             evc_dict["secondary_constraints"][metrict_type]["delay"] = min_bw["value"]
+
+        for uni, endpoint in zip(["uni_a", "uni_z"], content.get("endpoints", [])):
+            sdx_id = endpoint["port_id"]
+            kytos_id = self.sdx2kytos.get(sdx_id)
+            if not sdx_id or not kytos_id:
+                return None, 400, f"Invalid endpoint.port_id ({sdx_id})"
+            evc_dict.setdefault(uni, {})
+            evc_dict[uni]["interface_id"] = kytos_id
+            sdx_vlan, msg = self.parse_vlan(endpoint["vlan"])
+            if sdx_vlan is None:
+                return None, msg
+            if sdx_vlan:
+                evc_dict[uni]["tag"] = {
+                    "tag_type": "vlan",
+                    "value": sdx_vlan,
+                }
+
+        evc_dict["dynamic_backup_path"] = True
 
         return evc_dict, 0, None
 
@@ -536,10 +571,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         evcid = request.path_params["service_id"]
 
         try:
-            kytos_evc_url = os.environ.get("KYTOS_EVC_URL", KYTOS_EVC_URL)
-            response = requests.delete(
-                f"{kytos_evc_url.rstrip('/')}/{evcid}", timeout=30
-            )
+            response = requests.delete(f"{KYTOS_EVC_URL}{evcid}", timeout=30)
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
             log.warn(f"Delete EVC failed on Kytos: {exc} - {err}")
@@ -588,8 +620,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 evc_dict[attr] = content[attr]
 
         try:
-            kytos_evc_url = os.environ.get("KYTOS_EVC_URL", KYTOS_EVC_URL)
-            response = requests.post(kytos_evc_url, json=evc_dict, timeout=30)
+            response = requests.post(KYTOS_EVC_URL, json=evc_dict, timeout=30)
             assert response.status_code == 201, response.text
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
@@ -620,10 +651,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         kuni_z = self.sdx2kytos.get(uni_z)
 
         try:
-            response = requests.get(
-                os.environ.get("KYTOS_EVC_URL", KYTOS_EVC_URL),
-                timeout=30,
-            )
+            response = requests.get(KYTOS_EVC_URL, timeout=30)
             assert response.status_code == 200, response.text
             evcs = response.json()
         except Exception as exc:
@@ -649,10 +677,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             raise HTTPException(400, detail=msg)
 
         try:
-            kytos_evc_url = os.environ.get("KYTOS_EVC_URL", KYTOS_EVC_URL)
-            response = requests.delete(
-                f"{kytos_evc_url.rstrip('/')}/{evcid}", timeout=30
-            )
+            response = requests.delete(f"{KYTOS_EVC_URL}{evcid}", timeout=30)
             assert response.status_code == 200, response.text
         except Exception as exc:
             log.warn(

@@ -115,6 +115,30 @@ class TestMain:
         assert response.status_code == 201
         assert response.json() == {"service_id": "a123"}
 
+    @patch("requests.post")
+    @patch("requests.patch")
+    async def test_update_l2vpn(self, req_patch_mock, req_post_mock):
+        """Test update a l2vpn."""
+        req_patch_mock.return_value = MagicMock(status_code=200)
+        req_post_mock.return_value = MagicMock(status_code=201)
+        self.napp.controller.loop = asyncio.get_running_loop()
+        self.napp.sdx2kytos = {
+            "urn:sdx:port:testoxp.net:TestSw3:50": "aa:00:00:00:00:00:00:03:50",
+            "urn:sdx:port:testoxp.net:TestSw1:40": "aa:00:00:00:00:00:00:01:40",
+        }
+        payload = {
+            "endpoints": [
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw3:50", "vlan": "501"},
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw1:40", "vlan": "600"},
+            ],
+            "description": "changed!",
+        }
+        response = await self.api_client.patch(
+            f"{self.endpoint}/l2vpn/1.0/a123",
+            json=payload,
+        )
+        assert response.status_code == 201
+
     @patch("requests.delete")
     async def test_delete_l2vpn(self, requests_mock):
         """Test delete a l2vpn."""
