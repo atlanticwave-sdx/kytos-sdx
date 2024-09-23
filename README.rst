@@ -49,12 +49,15 @@ General Information
 The SDX Napp supports topology operations and L2VPN provisioning operations. Some examples:
 
 
-Show the Kytos-ng SDX Topology
+Get Kytos-ng SDX Topology
 ******************************
 
 .. code-block:: shell
 
 	curl -s -X GET http://127.0.0.1:8181/api/kytos/sdx/topology/2.0.0
+
+Send Topology to SDX-LC
+************************
 
 - Submit the Kytos-ng SDX Topology to SDX-LC (push topology sharing method):
 
@@ -62,17 +65,26 @@ Show the Kytos-ng SDX Topology
 
 	curl -s -X POST http://127.0.0.1:8181/api/kytos/sdx/topology/2.0.0
 
+Create L2VPN with old API
+*************************
+
 - Create a L2VPN using the *old* Provisioning APIs (currently being used by SDX-LC):
 
 .. code-block:: shell
 
 	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/v1/l2vpn_ptp -d '{"name": "AMPATH_vlan_503_503", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": {"value": 501, "tag_type": 1}}, "uni_z": {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "tag": {"value": 501, "tag_type": 1}}, "dynamic_backup_path": true}'
 
+Delete L2VPN with old API
+*************************
+
 - Delete a L2VPN using the *old* Provisioning APIs (currently being used by SDX-LC):
 
 .. code-block:: shell
 
 	curl -s -X DELETE -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/v1/l2vpn_ptp -d '{"name": "AMPATH_vlan_503_503", "uni_a": {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "tag": {"value": 501, "tag_type": 1}}, "uni_z": {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "tag": {"value": 501, "tag_type": 1}}, "dynamic_backup_path": true}'
+
+Create L2VPN with new API
+*************************
 
 - Create a L2VPN using the *new* Provisioning API (many examples):
 
@@ -90,6 +102,10 @@ Show the Kytos-ng SDX Topology
 	# Example 04: example with all possible attributes
 	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_503_503", "endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "501"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "501"}], "description": "test foobar xpto aa bbb", "scheduling": {"start_time": "2024-08-07T19:55:00Z", "end_time": "2024-08-07T19:58:00Z"}, "notifications": [{"email": "user@domain.com"},{"email": "user2@domain2.com"}], "qos_metrics": {"min_bw": {"value": 5,"strict": false}, "max_delay": {"value": 150, "strict": true}}}'
 
+
+Edit L2VPN with new API
+*************************
+
 - Editing a L2VPN using the *new* Provisioning API:
 
 .. code-block:: shell
@@ -97,6 +113,10 @@ Show the Kytos-ng SDX Topology
         curl -H 'Content-type: application/json' -X PATCH http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/f9ecff1309d845 -d '{"endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "301"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "4095"}], "description": "this is a l2vpn test"}'
 
 The example above changes the endpoints and the description of a L2VPN. Fields that can be changed: endpoints, description, scheduling, qos_metrics, name. Note about endpoints: if one endpoint has to be changed, you must provide both endpoints.
+
+
+Delete L2VPN with new API
+*************************
 
 - Delete a L2VPN using the *new* Provisioning API:
 
