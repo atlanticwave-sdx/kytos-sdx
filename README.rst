@@ -48,6 +48,8 @@ General Information
 
 The SDX Napp supports topology operations and L2VPN provisioning operations. Some examples:
 
+.. _get topology:
+
 - Show the Kytos-ng SDX Topology:
 
 .. code-block:: shell
