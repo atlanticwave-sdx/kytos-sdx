@@ -124,6 +124,15 @@ Delete L2VPN with new API
 
 	curl -s -X DELETE http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/ea492fd1238e4a
 
+Get L2VPN with new API
+*************************
+
+- Get a L2VPN using the *new* Provisioning API:
+
+.. code-block:: shell
+
+	curl -s http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/ea492fd1238e4a
+
 .. TAGs
 
 .. |Stable| image:: https://img.shields.io/badge/stability-stable-green.svg

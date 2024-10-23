@@ -14,6 +14,8 @@ from napps.kytos.sdx.tests.helpers import (
     get_converted_topology,
     get_topology,
     get_topology_dict,
+    get_evc,
+    get_evc_converted,
 )
 
 
@@ -251,3 +253,22 @@ class TestMain:
         vlan, msg = self.napp.parse_vlan("1:9999")
         assert vlan is None
         assert "Invalid vlan" in msg
+
+    @patch("requests.get")
+    async def test_get_l2vpn_api(self, req_get_mock):
+        """Test get a l2vpn using API."""
+        res_get_mock = MagicMock()
+        res_get_mock.status_code = 200
+        res_get_mock.json.return_value = get_evc()
+        req_get_mock.return_value = res_get_mock
+        self.napp.controller.loop = asyncio.get_running_loop()
+        self.napp.kytos2sdx = {
+            "aa:00:00:00:00:00:00:03:50": "urn:sdx:port:ampath.net:Ampath3:50",
+            "aa:00:00:00:00:00:00:02:40": "urn:sdx:port:ampath.net:Ampath2:40",
+        }
+        response = await self.api_client.request(
+            "GET",
+            f"{self.endpoint}/v1/l2vpn_ptp/88c326c7e70d49",
+        )
+        assert response.status_code == 200
+        assert response.json() == get_evc_converted()

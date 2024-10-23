@@ -421,6 +421,29 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         return JSONResponse({"service_id": circuit_id}, 201)
 
+    @rest("l2vpn/1.0/{service_id}", methods=["GET"])
+    def get_l2vpn(self, request: Request) -> JSONResponse:
+        """REST to GET L2VPN."""
+        evcid = request.path_params["service_id"]
+
+        try:
+            response = requests.get(f"{KYTOS_EVC_URL}{evcid}", timeout=30)
+        except Exception as exc:
+            err = traceback.format_exc().replace("\n", ", ")
+            log.warn(f"GET EVC failed on Kytos: {exc} - {err}")
+            raise HTTPException(
+                400, detail=f"Failed to get EVC from Kytos: {exc}"
+            ) from exc
+
+        if response.status_code == 404:
+            return JSONResponse(
+                {"description": "L2VPN Service ID provided does not exist"}, 404
+            )
+
+        sdx_l2vpn = self.parse_kytos_to_sdx(response.json())
+
+        return JSONResponse(sdx_l2vpn, 201)
+
     @rest("l2vpn/1.0/{service_id}", methods=["PATCH"])
     def update_l2vpn(self, request: Request) -> JSONResponse:
         """REST to update L2VPN connection."""
@@ -454,6 +477,32 @@ class Main(KytosNApp):  # pylint: disable=R0904
             )
 
         return JSONResponse("L2VPN Service Modified", 201)
+
+    def parse_kytos_to_sdx(self, evc_dict):
+        """Parse an EVC from Kytos to L2VPN for SDX."""
+        sdx_l2vpn = {
+            "name": evc_dict["name"],
+            "id": evc_dict["id"],
+            "start_date": evc_dict["start_time"],
+            "creation_time": evc_dict["creation_time"],
+            "request_time": evc_dict["request_time"],
+            "end_date": evc_dict["end_date"],
+            "updated_at": evc_dict["updated_at"],
+            "dynamic_backup_path": evc_dict["dynamic_backup_path"],
+            "status": "up" if evc_dict["active"] else "down",
+            "state": "enabled" if evc_dict["enabled"] else "disabled",
+            "endpoints": [],
+        }
+        if "sdx_description" in evc_dict["metadata"]:
+            sdx_l2vpn["description"] = evc_dict["metadata"]["sdx_description"]
+        if "sdx_notifications" in evc_dict["metadata"]:
+            sdx_l2vpn["notifications"] = evc_dict["metadata"]["sdx_notifications"]
+        for uni in ["uni_a", "uni_z"]:
+            kytos_id = evc_dict[uni]["interface_id"]
+            sdx_id = self.kytos2sdx.get(kytos_id, kytos_id)
+            sdx_vlan = evc_dict[uni].get("tag", {}).get("value", "all")
+            sdx_l2vpn["endpoints"].append({"port_id": sdx_id, "vlan": sdx_vlan})
+        return sdx_l2vpn
 
     # pylint: disable=too-many-return-statements, too-many-branches
     def parse_evc(self, content):
