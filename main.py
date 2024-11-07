@@ -88,6 +88,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 "version": 1,
                 "timestamp": get_timestamp(),
             }
+
+    def load_kytos_topology(self):
+        """Load topology from Kytos-ng."""
         with self._topo_lock:
             self._topo_dict = self.get_kytos_topology()
             self._converted_topo = self.convert_topology_v2()
@@ -111,10 +114,15 @@ class Main(KytosNApp):  # pylint: disable=R0904
             )
         return topology
 
-    @listen_to(
-        "kytos/topology.updated",
-        "kytos/topology.topology_loaded",
-    )
+    @listen_to("kytos/topology.topology_loaded")
+    def on_topology_loaded(self, event: KytosEvent):
+        """Handler for on topology_loaded."""
+        self.handler_on_topology_loaded()
+
+    def handler_on_topology_loaded(self):
+        self.load_kytos_topology()
+
+    @listen_to("kytos/topology.updated")
     def on_topology_updated_event(self, event: KytosEvent):
         """Handler for topology updated events."""
         self.handler_on_topology_updated_event(event)
