@@ -120,7 +120,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         self.handler_on_topology_loaded()
 
     def handler_on_topology_loaded(self):
-        """Hnalder on_topology_loaded."""
+        """Handler on_topology_loaded."""
         self.load_kytos_topology()
 
     @listen_to("kytos/topology.updated")
