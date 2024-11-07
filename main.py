@@ -115,11 +115,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
         return topology
 
     @listen_to("kytos/topology.topology_loaded")
-    def on_topology_loaded(self, event: KytosEvent):
+    def on_topology_loaded(self, _event: KytosEvent):
         """Handler for on topology_loaded."""
         self.handler_on_topology_loaded()
 
     def handler_on_topology_loaded(self):
+        """Hnalder on_topology_loaded."""
         self.load_kytos_topology()
 
     @listen_to("kytos/topology.updated")

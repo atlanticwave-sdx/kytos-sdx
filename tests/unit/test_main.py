@@ -115,6 +115,15 @@ class TestMain:
         assert response.status_code == 201
         assert response.json() == {"service_id": "a123"}
 
+    def test_handler_on_topology_loaded(self):
+        """Test handler_on_topology_loaded."""
+        self.napp.get_kytos_topology = MagicMock()
+        some_topo = {"switches": {"dpid1": {}}, "links": {"link1": {}}}
+        self.napp.get_kytos_topology.return_value = some_topo
+        self.napp.convert_topology_v2 = MagicMock()
+        self.napp.handler_on_topology_loaded()
+        assert self.napp._topo_dict == some_topo
+
     @patch("requests.post")
     @patch("requests.patch")
     async def test_update_l2vpn(self, req_patch_mock, req_post_mock):
