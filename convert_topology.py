@@ -7,9 +7,7 @@ SDX API
 import os
 import re
 
-from .settings import (
-    OVERRIDE_VLAN_RANGE,
-)
+from .settings import OVERRIDE_VLAN_RANGE
 
 
 class ParseConvertTopology:
@@ -157,7 +155,7 @@ class ParseConvertTopology:
             sdx_port["nni"] = ""
 
         vlan_range = interface["metadata"].get("sdx_vlan_range")
-        if not vlan_range:
+        if vlan_range is None:
             vlan_range = self.override_vlan_range
             if vlan_range is None:
                 vlan_range = interface.get("tag_ranges", [[1, 4095]])
