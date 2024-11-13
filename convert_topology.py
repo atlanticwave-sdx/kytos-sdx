@@ -4,6 +4,7 @@ Main class of kytos/sdx Kytos Network Application.
 SDX API
 """
 
+import os
 import re
 
 from .settings import (
