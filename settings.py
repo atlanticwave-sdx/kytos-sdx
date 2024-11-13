@@ -24,3 +24,9 @@ KYTOS_TOPOLOGY_URL = "http://127.0.0.1:8181/api/kytos/topology/v3/"
 
 # Kytos topology endpoint for obtaining vlan tags
 KYTOS_TAGS_URL = "http://127.0.0.1:8181/api/kytos/topology/v3/interfaces/tag_ranges"
+
+# Override interface vlan range for sdx when no sdx_vlan_range metadata
+# is available. None means it wont override, it will defaults to interface
+# tag_ranges. Example:
+# OVERRIDE_VLAN_RANGE = [[100, 200]]
+OVERRIDE_VLAN_RANGE = None
