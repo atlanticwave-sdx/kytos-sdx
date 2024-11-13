@@ -20,4 +20,4 @@ Changed
 
 Fixed
 =====
--
+- Avoid blocking setup() when loading topology
