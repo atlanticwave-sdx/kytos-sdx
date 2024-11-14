@@ -4,7 +4,10 @@ Main class of kytos/sdx Kytos Network Application.
 SDX API
 """
 
+import os
 import re
+
+from .settings import OVERRIDE_VLAN_RANGE
 
 
 class ParseConvertTopology:
@@ -17,6 +20,11 @@ class ParseConvertTopology:
         self.oxp_name = args["oxp_name"]
         self.oxp_url = args["oxp_url"]
         self.model_version = "2.0.0"
+        # override interface vlan range for sdx when no sdx_vlan_range
+        # metadata is available
+        self.override_vlan_range = os.environ.get(
+            "OVERRIDE_VLAN_RANGE", OVERRIDE_VLAN_RANGE
+        )
         # mapping from Kytos to SDX and vice-versa
         self.kytos2sdx = {}
         self.sdx2kytos = {}
@@ -147,13 +155,17 @@ class ParseConvertTopology:
             sdx_port["nni"] = ""
 
         vlan_range = interface["metadata"].get("sdx_vlan_range")
-        if not vlan_range:
-            vlan_range = interface.get("tag_ranges", [[1, 4095]])
+        if vlan_range is None:
+            vlan_range = self.override_vlan_range
+            if vlan_range is None:
+                vlan_range = interface.get("tag_ranges", [[1, 4095]])
 
         sdx_port["services"] = {
-            "l2vpn-ptp": {"vlan_range": vlan_range},
             # "l2vpn-ptmp":{"vlan_range": vlan_range}
         }
+
+        if vlan_range:
+            sdx_port["services"]["l2vpn-ptp"] = {"vlan_range": vlan_range}
 
         sdx_port["private"] = ["status"]
 
