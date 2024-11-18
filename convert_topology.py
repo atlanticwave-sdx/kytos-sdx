@@ -134,8 +134,12 @@ class ParseConvertTopology:
 
         sdx_port = {}
         sdx_port["id"] = self.get_port_urn(interface)
-        sdx_port["name"] = interface["metadata"].get("port_name", "")[:30]
-        if not sdx_port["name"]:
+        if interface["metadata"].get("port_name"):
+            port_name = interface["metadata"]["port_name"]
+            port_name = re.sub(r"\s+", "_", port_name)
+            port_name = re.sub("[^A-Za-z0-9_.,/-]", "", port_name)
+            sdx_port["name"] = port_name[:30]
+        else:
             sdx_port["name"] = interface["name"][:30]
         sdx_port["node"] = f"urn:sdx:node:{self.oxp_url}:{sdx_node_name}"
         sdx_port["type"] = self.get_type_port_speed(str(interface["speed"]))
