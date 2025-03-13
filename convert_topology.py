@@ -4,10 +4,7 @@ Main class of kytos/sdx Kytos Network Application.
 SDX API
 """
 
-import os
 import re
-
-from .settings import OVERRIDE_VLAN_RANGE
 
 
 class ParseConvertTopology:
@@ -22,9 +19,9 @@ class ParseConvertTopology:
         self.model_version = "2.0.0"
         # override interface vlan range for sdx when no sdx_vlan_range
         # metadata is available
-        self.override_vlan_range = os.environ.get(
-            "OVERRIDE_VLAN_RANGE", OVERRIDE_VLAN_RANGE
-        )
+        self.override_vlan_range = args["override_vlan_range"]
+        # should export items from the topology by default?
+        self.sdx_def_include = args["sdx_def_include"]
         # mapping from Kytos to SDX and vice-versa
         self.kytos2sdx = {}
         self.sdx2kytos = {}
@@ -90,13 +87,15 @@ class ParseConvertTopology:
         return speed_to_type.get(speed, "Other")
 
     @staticmethod
-    def get_status(status: bool) -> str:
+    def get_status(status: str) -> str:
         """Function to obtain the status."""
-        return "up" if status else "down"
+        return "up" if status == "UP" else "down"
 
     @staticmethod
-    def get_state(state: bool) -> str:
+    def get_state(state: bool, status_reason: list) -> str:
         """Function to obtain the state."""
+        if "maintenance" in status_reason:
+            return "maintenance"
         return "enabled" if state else "disabled"
 
     def get_kytos_link_label(self, kytos_link: dict) -> str:
@@ -143,8 +142,10 @@ class ParseConvertTopology:
             sdx_port["name"] = interface["name"][:30]
         sdx_port["node"] = f"urn:sdx:node:{self.oxp_url}:{sdx_node_name}"
         sdx_port["type"] = self.get_type_port_speed(str(interface["speed"]))
-        sdx_port["status"] = self.get_status(interface["active"])
-        sdx_port["state"] = self.get_state(interface["enabled"])
+        sdx_port["status"] = self.get_status(interface["status"])
+        sdx_port["state"] = self.get_state(
+            interface["enabled"], interface["status_reason"]
+        )
 
         sdx_port["mtu"] = interface["metadata"].get("mtu", 1500)
 
@@ -173,6 +174,8 @@ class ParseConvertTopology:
 
         sdx_port["private"] = ["status"]
 
+        sdx_port["entities"] = interface["metadata"].get("entities", [])
+
         return sdx_port
 
     def get_ports(self, sdx_node_name: str, interfaces: dict) -> list:
@@ -180,8 +183,11 @@ class ParseConvertTopology:
         to get a full list of ports from a node/ interface"""
         ports = []
         for interface in interfaces.values():
-            port_no = interface["port_number"]
-            if port_no != 4294967294:
+            if not interface["metadata"].get(
+                "sdx_include", self.sdx_def_include["interface"]
+            ):
+                continue
+            if interface["port_number"] != 4294967294:
                 ports.append(self.get_port(sdx_node_name, interface))
                 self.kytos2sdx[interface["id"]] = ports[-1]["id"]
                 self.sdx2kytos[ports[-1]["id"]] = interface["id"]
@@ -222,8 +228,10 @@ class ParseConvertTopology:
 
         sdx_node["ports"] = self.get_ports(sdx_node["name"], kytos_node["interfaces"])
 
-        sdx_node["status"] = self.get_status(kytos_node["active"])
-        sdx_node["state"] = self.get_state(kytos_node["enabled"])
+        sdx_node["status"] = self.get_status(kytos_node["status"])
+        sdx_node["state"] = self.get_state(
+            kytos_node["enabled"], kytos_node["status_reason"]
+        )
 
         return sdx_node
 
@@ -231,7 +239,9 @@ class ParseConvertTopology:
         """returns SDX Nodes list with every enabled Kytos node in topology"""
         sdx_nodes = []
         for kytos_node in self.get_kytos_nodes():
-            if kytos_node["enabled"]:
+            if kytos_node["metadata"].get(
+                "sdx_include", self.sdx_def_include["switch"]
+            ):
                 sdx_nodes.append(self.get_sdx_node(kytos_node))
         return sdx_nodes
 
@@ -261,9 +271,11 @@ class ParseConvertTopology:
         sdx_link["residual_bandwidth"] = link_md.get("residual_bandwidth", 100)
         sdx_link["latency"] = link_md.get("latency", 0)
         sdx_link["packet_loss"] = link_md.get("packet_loss", 0)
-        sdx_link["availability"] = link_md.get("availability", 0)
-        sdx_link["status"] = self.get_status(kytos_link["active"])
-        sdx_link["state"] = self.get_state(kytos_link["enabled"])
+        sdx_link["availability"] = link_md.get("availability", 100)
+        sdx_link["status"] = self.get_status(kytos_link["status"])
+        sdx_link["state"] = self.get_state(
+            kytos_link["enabled"], kytos_link["status_reason"]
+        )
         sdx_link["private"] = ["packet_loss"]
 
         return sdx_link
@@ -275,7 +287,7 @@ class ParseConvertTopology:
         sdx_links = []
 
         for kytos_link in self.get_kytos_links():
-            if kytos_link["enabled"]:
+            if kytos_link["metadata"].get("sdx_include", self.sdx_def_include["link"]):
                 sdx_link = self.get_sdx_link(kytos_link)
                 if sdx_link:
                     sdx_links.append(sdx_link)

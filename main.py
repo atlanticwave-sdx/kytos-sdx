@@ -21,8 +21,11 @@ from .settings import (
     KYTOS_EVC_URL,
     KYTOS_TAGS_URL,
     KYTOS_TOPOLOGY_URL,
+    NAME_PREFIX,
+    OVERRIDE_VLAN_RANGE,
     OXPO_NAME,
     OXPO_URL,
+    SDX_DEF_INCLUDE,
     SDXLC_URL,
     TOPOLOGY_EVENT_WAIT,
 )
@@ -63,6 +66,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
         self._topo_wait = 1
         self._topo_lock = threading.Lock()
         self._topo_handler_lock = threading.Lock()
+        # NAME_PREFIX: string to be prefixed on EVC names
+        self.name_prefix = NAME_PREFIX
+        # SDX_DEF_INCLUDE: define default filters for topology export
+        self.sdx_def_include = SDX_DEF_INCLUDE
+        # OVERRIDE_VLAN_RANGE: override vlan range on an interface
+        self.override_vlan_range = OVERRIDE_VLAN_RANGE
         # mapping from IDs used by kytos and SDX
         # ex: urn:sdx:port:sax.net:Sax01:40 <--> cc:00:00:00:00:00:00:01:40
         self.kytos2sdx = {}
@@ -185,9 +194,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 self._topo_dict["switches"][switch.id] = deepcopy(switch.as_dict())
                 admin_changes.append(f"Added switch {switch.id}")
                 continue
-            if switch.is_active() != switch_dict["active"]:
-                switch_dict["active"] = switch.is_active()
-                oper_changes.append(f"Changed switch.active {switch.is_active()}")
+            if switch.status != switch_dict["status"]:
+                switch_dict["status"] = switch.status
+                oper_changes.append(f"Changed switch.status {switch.status}")
             if switch.is_enabled() != switch_dict["enabled"]:
                 switch_dict["enabled"] = switch.is_enabled()
                 admin_changes.append(f"Changed switch.enabled {switch.is_enabled()}")
@@ -218,9 +227,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 interfaces_dict[intf.id] = deepcopy(intf.as_dict())
                 admin_changes.append(f"Added interface {intf.id}")
                 continue
-            if intf.is_active() != intf_dict["active"]:
-                intf_dict["active"] = intf.is_active()
-                oper_changes.append(f"Changed interface.active {intf.is_active()}")
+            if intf.status != intf_dict["status"]:
+                intf_dict["status"] = intf.status
+                oper_changes.append(f"Changed interface.status {intf.status}")
             if intf.is_enabled() != intf_dict["enabled"]:
                 intf_dict["enabled"] = intf.is_enabled()
                 admin_changes.append(f"Changed interface.enabled {intf.is_enabled()}")
@@ -244,9 +253,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 self._topo_dict["links"][link.id] = deepcopy(link.as_dict())
                 admin_changes.append(f"Added link {link.id}")
                 continue
-            if link.is_active() != link_dict["active"]:
-                link_dict["active"] = link.is_active()
-                oper_changes.append(f"Changed link.active {link.is_active()}")
+            if link.status != link_dict["status"]:
+                link_dict["status"] = link.status
+                oper_changes.append(f"Changed link.status {link.status}")
             if link.is_enabled() != link_dict["enabled"]:
                 link_dict["enabled"] = link.is_enabled()
                 admin_changes.append(f"Changed link.enabled {link.is_enabled()}")
@@ -314,6 +323,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             "sdx_vlan_range",
             "sdx_nni",
             "mtu",
+            "entities",
         ]
 
         for attr in metadata_interest:
@@ -332,6 +342,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
         """Try to update attribute for an object."""
         attr_changed = False
         attr_interest = [
+            # all of them
+            "status_reason",
             # link attrs
             # endpoint?
             # switch attrs
@@ -361,6 +373,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 timestamp=self.sdx_topology["timestamp"],
                 oxp_name=self.oxpo_name,
                 oxp_url=self.oxpo_url,
+                sdx_def_include=self.sdx_def_include,
+                override_vlan_range=self.override_vlan_range,
             ).parse_convert_topology()
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
@@ -430,6 +444,29 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         return JSONResponse({"service_id": circuit_id}, 201)
 
+    @rest("l2vpn/1.0/{service_id}", methods=["GET"])
+    def get_l2vpn(self, request: Request) -> JSONResponse:
+        """REST to GET L2VPN."""
+        evcid = request.path_params["service_id"]
+
+        try:
+            response = requests.get(f"{KYTOS_EVC_URL}{evcid}", timeout=30)
+        except Exception as exc:
+            err = traceback.format_exc().replace("\n", ", ")
+            log.warn(f"GET EVC failed on Kytos: {exc} - {err}")
+            raise HTTPException(
+                400, detail=f"Failed to get EVC from Kytos: {exc}"
+            ) from exc
+
+        if response.status_code == 404:
+            return JSONResponse(
+                {"description": "L2VPN Service ID provided does not exist"}, 404
+            )
+
+        sdx_l2vpn = self.parse_kytos_to_sdx(response.json())
+
+        return JSONResponse(sdx_l2vpn, 200)
+
     @rest("l2vpn/1.0/{service_id}", methods=["PATCH"])
     def update_l2vpn(self, request: Request) -> JSONResponse:
         """REST to update L2VPN connection."""
@@ -464,6 +501,28 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         return JSONResponse("L2VPN Service Modified", 201)
 
+    def parse_kytos_to_sdx(self, evc_dict):
+        """Parse an EVC from Kytos to L2VPN for SDX."""
+        sdx_l2vpn = {
+            "name": evc_dict["name"],
+            "id": evc_dict["id"],
+            "creation_date": evc_dict["creation_time"],
+            "last_modified": evc_dict["updated_at"],
+            "status": "up" if evc_dict["active"] else "down",
+            "state": "enabled" if evc_dict["enabled"] else "disabled",
+            "endpoints": [],
+        }
+        if "sdx_description" in evc_dict["metadata"]:
+            sdx_l2vpn["description"] = evc_dict["metadata"]["sdx_description"]
+        if "sdx_notifications" in evc_dict["metadata"]:
+            sdx_l2vpn["notifications"] = evc_dict["metadata"]["sdx_notifications"]
+        for uni in ["uni_a", "uni_z"]:
+            kytos_id = evc_dict[uni]["interface_id"]
+            sdx_id = self.kytos2sdx.get(kytos_id, kytos_id)
+            sdx_vlan = evc_dict[uni].get("tag", {}).get("value", "all")
+            sdx_l2vpn["endpoints"].append({"port_id": sdx_id, "vlan": sdx_vlan})
+        return sdx_l2vpn
+
     # pylint: disable=too-many-return-statements, too-many-branches
     def parse_evc(self, content):
         """Parse content request into EVC dict."""
@@ -483,7 +542,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         evc_dict = {}
 
         if "name" in content:
-            evc_dict["name"] = content["name"]
+            evc_dict["name"] = self.name_prefix + content["name"]
         if "description" in content:
             evc_dict.setdefault("metadata", {})
             evc_dict["metadata"]["sdx_description"] = content["description"]
@@ -627,6 +686,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 evc_dict[attr]["interface_id"] = kytos_id
                 if "tag" in content[attr]:
                     evc_dict[attr]["tag"] = content[attr]["tag"]
+            elif attr == "name":
+                evc_dict[attr] = self.name_prefix + content[attr]
             else:
                 evc_dict[attr] = content[attr]
 
