@@ -1,4 +1,4 @@
 -e git+https://github.com/kytos-ng/python-openflow.git#egg=python-openflow
--e kytos[dev]@git+https://github.com/kytos-ng/kytos.git
+-e git+https://github.com/kytos-ng/kytos.git#egg=kytos[dev]
 -e .[dev]
 pytest-unordered

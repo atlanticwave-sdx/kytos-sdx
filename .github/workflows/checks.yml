@@ -22,7 +22,8 @@ jobs:
 
       - name: Install Tox
         run: |
-          pip install tox coverage
+          python -m pip install --upgrade pip
+          pip install tox==3.27.1 tox-gh-actions==2.12.0
 
       - name: Lint
         run: |
