@@ -12,8 +12,6 @@ from kytos.lib.helpers import get_controller_mock, get_test_client
 from napps.kytos.sdx.main import Main
 from napps.kytos.sdx.tests.helpers import (
     get_converted_topology,
-    get_evc,
-    get_evc_converted,
     get_topology,
     get_topology_dict,
 )
@@ -51,28 +49,6 @@ class TestMain:
             assert attr in converted_topo
             assert converted_topo[attr] == expected[attr]
 
-    @patch("requests.get")
-    def test_topology_loaded(self, requests_mock):
-        """Test topology loaded."""
-        expected = get_converted_topology()
-        self.napp.sdx_topology = {"version": 1, "timestamp": "2024-07-18T15:33:12Z"}
-        mock_res1, mock_res2 = MagicMock(), MagicMock()
-        mock_res1.json.return_value = {"topology": get_topology_dict()}
-        mock_res2.status_code = 200
-        mock_res2.json.return_value = {
-            "aa:00:00:00:00:00:00:02:50": {"tag_ranges": {"vlan": [[1, 4095]]}}
-        }
-        requests_mock.side_effect = [mock_res1, mock_res2]
-        self.napp.handler_on_topology_loaded()
-        converted_topo = self.napp._converted_topo
-        for node in converted_topo["nodes"]:
-            node["ports"] = unordered(node["ports"])
-        assert unordered(converted_topo["nodes"]) == expected["nodes"]
-        assert unordered(converted_topo["links"]) == expected["links"]
-        for attr in ["name", "id", "model_version", "services"]:
-            assert attr in converted_topo
-            assert converted_topo[attr] == expected[attr]
-
     @patch("time.sleep", return_value=None)
     @patch("requests.post")
     def test_update_topology_existing_data(self, requests_mock, _):
@@ -91,62 +67,6 @@ class TestMain:
         assert self.napp._topology == topology
         assert self.napp.sdx_topology["version"] == 2
         requests_mock.assert_called()
-
-    @patch("time.sleep", return_value=None)
-    def test_update_topology_metadata_success_case(self, _):
-        """Test update metadata method to success case."""
-        self.napp._topo_dict = get_topology_dict()
-        self.napp.sdx_topology = {"version": 1, "timestamp": "2024-07-18T15:33:12Z"}
-        topology = get_topology()
-        # switch and interface metadata changes
-        # switch metadata
-        switch = topology.switches["aa:00:00:00:00:00:00:02"]
-        switch.metadata["iso3166_2_lvl4"] = "US-CA"
-        event = KytosEvent(
-            name="kytos/topology.switches.metadata.added",
-            content={"switch": switch, "metadata": switch.metadata.copy()},
-        )
-        self.napp.handle_metadata_event(event)
-        assert self.napp.sdx_topology["version"] == 2
-        # interface metadata
-        interface = switch.interfaces["aa:00:00:00:00:00:00:02:50"]
-        interface.metadata["entities"] = ["Test1", "this is a test"]
-        event = KytosEvent(
-            name="kytos/topology.interfaces.metadata.added",
-            content={"interface": interface, "metadata": interface.metadata.copy()},
-        )
-        self.napp.handle_metadata_event(event)
-        assert self.napp.sdx_topology["version"] == 3
-        # now check the content
-        res_sw = next(
-            filter(
-                lambda sw: sw["name"] == "TestSw2", self.napp._converted_topo["nodes"]
-            )
-        )
-        assert res_sw["location"]["iso3166_2_lvl4"] == "US-CA"
-        res_intf = next(
-            filter(lambda intf: intf["name"] == "TestSw2-eth50", res_sw["ports"])
-        )
-        assert res_intf["entities"] == ["Test1", "this is a test"]
-
-        # link metadata
-        link = topology.links[
-            "4b7b34ca81ef25f18b453f6ea2f4ed328d9db4beba0e6b2eeab3dd2441f3b36b"
-        ]
-        link.metadata["residual_bandwidth"] = 90
-        event = KytosEvent(
-            name="kytos/topology.links.metadata.added",
-            content={"link": link, "metadata": link.metadata.copy()},
-        )
-        self.napp.handle_metadata_event(event)
-        assert self.napp.sdx_topology["version"] == 4
-        res_link = next(
-            filter(
-                lambda link: link["name"] == "TestSw2/3_TestSw3/3",
-                self.napp._converted_topo["links"],
-            )
-        )
-        assert res_link["residual_bandwidth"] == 90
 
     async def test_get_topology_response(self):
         """Test shortest path."""
@@ -340,22 +260,3 @@ class TestMain:
         vlan, msg = self.napp.parse_vlan("1:9999")
         assert vlan is None
         assert "Invalid vlan" in msg
-
-    @patch("requests.get")
-    async def test_get_l2vpn_api(self, req_get_mock):
-        """Test get a l2vpn using API."""
-        mock_res = MagicMock()
-        mock_res.status_code = 200
-        mock_res.json.return_value = get_evc()
-        req_get_mock.return_value = mock_res
-        self.napp.controller.loop = asyncio.get_running_loop()
-        self.napp.kytos2sdx = {
-            "aa:00:00:00:00:00:00:03:50": "urn:sdx:port:ampath.net:Ampath3:50",
-            "aa:00:00:00:00:00:00:02:40": "urn:sdx:port:ampath.net:Ampath2:40",
-        }
-        response = await self.api_client.request(
-            "GET",
-            f"{self.endpoint}/l2vpn/1.0/88c326c7e70d49",
-        )
-        assert response.status_code == 200
-        assert response.json() == get_evc_converted()

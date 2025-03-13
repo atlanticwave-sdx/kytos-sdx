@@ -42,46 +42,6 @@ Requirements
 - `kytos/topology <https://github.com/kytos-ng/topology>`_
 - `kytos/mef_eline <https://github.com/kytos-ng/mef_eline>`_
 
-Kytos configuration
-===================
-
-The Kytos SDX Napp exports information about the Kytos topology to the SDX Local Controller. Thus, some information needs to be configured on the Kytos topology to enable the SDX Napps to export them. Here are some configs needed:
-
-- `Switch.metadata.iso3166_2_lvl4`: this metadata should be set to a string containing the short and unique alphanumeric codes representing the state (or other administrative divisions) and country. Example: "FL-US" (Florida - USA). Another example: "SP-BR" (Sao Paulo - Brazil)
-
-- `Interface.metadata.sdx_vlan_range`: VLAN range that should be allowed for SDX to use when creating point-to-point L2VPN on Kytos (aka MEF-Eline EVCs). The format for this attribute is a list of tuples, where each tuple contains the range's first and last VLAN ID. Example: [[1, 4095]] (include all VLANs). Another example: [[1, 100], [300, 300]] (include VLANs 1 to 100 and VLAN 300)
-
-- `Interface.metadata.sdx_nni`: the `sdx_nni` attribute must only be set if that interface connects your OXP to another OXP (the boundary between two domains). In this case, it has to be a string representing the remote OXP's Port ID (format: "urn:sdx:port:<oxp_url>:<node_name>:<port_name>"). Example: suppose the port is an AmLight port connected to ZAOXI OXP, with the remote node at ZAOXI being "s1" and remote port at ZAOXI being "50" then the `sdx_nni` attribute on the AmLight topology side is set to "urn:sdx:port:zaoxi.ac.za:s1:50".
-
-- `Interface.metadata.entities`: This attribute is an unrestricted list of strings, where each string could be the name, acronym, autonomous system number, or any other descriptive approach.
-
-Besides the specific metadata above, other well-known Kytos metadata are also used:
-
-- `Switch.metadata.node_name`: string which represents the Switch Name (SDX Napp will allow only ASCII and a few special characters: "." (period), "," (comma), "-" (dash), "_" (underscore)", and "/" (forward slash). Moreover, SDX Napp will truncate the name to 30 characters)
-
-- `Switch.metadata.lat`: latitude
-
-- `Switch.metadata.lng`: longitude
-
-- `Switch.metadata.address`: address
-
-- `Interface.metadata.port_name`: string which represents the port name/description (SDX Napp will allow only ASCII and a few special characters: "." (period), "," (comma), "-" (dash), "_" (underscore)", and "/" (forward slash). Moreover, SDX Napp will truncate the name to 30 characters)
-
-- `Interface.metadata.mtu`: MTU of the port. If not set, it defaults to 1500.
-
-- `Interface.metadata.entities`: The entities attribute describes the facilities/institutions connected to the port (universities, research facilities, research and education networks, and instruments). This is an unrestricted list of strings, where each string could be the name, acronym, autonomous system number, or any other descriptive approach. (example: `"entities": ["FIU", "Florida International University"]`)
-
-- `Link.metadata.link_name`: string which represents the link name/description (SDX Napp will allow only ASCII and a few special characters: "." (period), "," (comma), "-" (dash), "_" (underscore)", and "/" (forward slash). Moreover, SDX Napp will truncate the name to 30 characters)
-
-- `Link.metadata.residual_bandwidth`: attribute describes the average bandwidth available for the link. If not set, defaults to 100.
-
-- `Link.metadata.latency`: attribute describes the delay introduced by the Link object in milliseconds to the end-to-end path. If not set, defaults to 0.
-
-- `Link.metadata.packet_loss`: This attribute describes the percentage of packet loss observed for the link. If not set, it defaults to 0.
-
-- `Link.metadata.availability`: attribute describes the percentage of time the link has been available for data transmission. If not set, defaults to 100.
-
-Finally, it is possible to filter out which components of the topology you want to export to SDX: Switches, Interfaces and Links. To filter out the components of the topology, you can define the settings attribute `SDX_DEF_INCLUDE` (defaults to True for all components, meaning all items are enabled) and then define a metadata attribute on each component named `sdx_include` (boolean). For example, if you want to export the whole topology except one particular interface, you must keep `SDX_DEF_INCLUDE={"switch": True, "link": True, "interface": True}` and then set the specific interface metadata with `sdx_include=False`. The same happens all the way around: if you only want to include certain switches and specific interfaces, then you should set the `SDX_DEF_INCLUDE={"switch": False, "interface": True, "link": True}` and set the `sdx_include=True` on the items you want to export. Be aware that if you set a switch with `sdx_include=False`, all interfaces on that switch and links to that switch will NOT be included.
 
 General Information
 ===================
@@ -163,15 +123,6 @@ Delete L2VPN with new API
 .. code-block:: shell
 
 	curl -s -X DELETE http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/ea492fd1238e4a
-
-Get L2VPN with new API
-*************************
-
-- Get a L2VPN using the *new* Provisioning API:
-
-.. code-block:: shell
-
-	curl -s http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/ea492fd1238e4a
 
 .. TAGs
 
