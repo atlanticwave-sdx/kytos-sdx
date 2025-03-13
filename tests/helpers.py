@@ -62,3 +62,13 @@ def get_topology():
 def get_converted_topology():
     """Get the converted topology."""
     return json.loads((Path(__file__).parent / "test_topo_converted.json").read_text())
+
+
+def get_evc():
+    """Get EVC from Kytos."""
+    return json.loads((Path(__file__).parent / "test_evc.json").read_text())
+
+
+def get_evc_converted():
+    """Get EVC from Kytos."""
+    return json.loads((Path(__file__).parent / "test_evc_converted.json").read_text())
