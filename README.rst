@@ -3,7 +3,7 @@
 .. raw:: html
 
   <div align="center">
-    <h1><code>kyto-ng/sdx</code></h1>
+    <h1><code>kytos-ng/sdx</code></h1>
 
     <strong>Kytos-ng Napp that implements SDX Integration</strong>
   </div>
