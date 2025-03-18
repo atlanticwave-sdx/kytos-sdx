@@ -77,11 +77,36 @@ class TestMain:
     @patch("requests.post")
     def test_update_topology_existing_data(self, requests_mock, _):
         """Test update topology with existing data."""
-        self.napp._topo_dict = get_topology_dict()
+        # simulate that initially TestSw1 is disabled
+        topo_dict = get_topology_dict()
+        for sw in topo_dict["switches"].values():
+            if sw["data_path"] != "TestSw1":
+                continue
+            sw["status"] = "DISABLED"
+            sw["enabled"] = False
+            sw["status_reason"] = ["disabled"]
+            for intf in sw["interfaces"].values():
+                intf["status"] = "DISABLED"
+                intf["enabled"] = False
+                intf["status_reason"] = ["disabled"]
+        for link in topo_dict["links"].values():
+            if all(
+                [
+                    not link["endpoint_a"]["name"].startswith("TestSw1"),
+                    not link["endpoint_b"]["name"].startswith("TestSw1"),
+                ]
+            ):
+                continue
+            link["status"] = "DISABLED"
+            link["enabled"] = False
+            link["status_reason"] = ["disabled"]
+
+        self.napp._topo_dict = topo_dict
         self.napp.sdx_topology = {"version": 1, "timestamp": "2024-07-18T15:33:12Z"}
+
+        # now send an update with TestSw1 enabled and TestSw2 down
         topology = get_topology()
         topology.switches["aa:00:00:00:00:00:00:02"].is_active.return_value = False
-        topology.switches["aa:00:00:00:00:00:00:02"].disable()
         topology.switches["aa:00:00:00:00:00:00:02"].metadata["lat"] = "26.37"
 
         event = KytosEvent(
@@ -91,6 +116,21 @@ class TestMain:
         assert self.napp._topology == topology
         assert self.napp.sdx_topology["version"] == 2
         requests_mock.assert_called()
+
+        # Expected converted topology: all items related to
+        # aa:00:00:00:00:00:00:02/TestSw2 should be down and latitude changed
+        expected = get_converted_topology()
+        for node in expected["nodes"]:
+            if node["name"] == "TestSw2":
+                node["status"] = "down"
+                node["location"]["latitude"] = 26.37
+                break
+
+        converted_topo = self.napp._converted_topo
+        for node in converted_topo["nodes"]:
+            node["ports"] = unordered(node["ports"])
+        assert unordered(converted_topo["nodes"]) == expected["nodes"]
+        assert unordered(converted_topo["links"]) == expected["links"]
 
     @patch("time.sleep", return_value=None)
     def test_update_topology_metadata_success_case(self, _):
