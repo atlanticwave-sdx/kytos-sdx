@@ -194,9 +194,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 self._topo_dict["switches"][switch.id] = deepcopy(switch.as_dict())
                 admin_changes.append(f"Added switch {switch.id}")
                 continue
-            if switch.status != switch_dict["status"]:
-                switch_dict["status"] = switch.status
-                oper_changes.append(f"Changed switch.status {switch.status}")
+            if switch.status.value != switch_dict["status"]:
+                switch_dict["status"] = switch.status.value
+                oper_changes.append(f"Changed switch.status {switch.status.value}")
             if switch.is_enabled() != switch_dict["enabled"]:
                 switch_dict["enabled"] = switch.is_enabled()
                 admin_changes.append(f"Changed switch.enabled {switch.is_enabled()}")
@@ -227,9 +227,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 interfaces_dict[intf.id] = deepcopy(intf.as_dict())
                 admin_changes.append(f"Added interface {intf.id}")
                 continue
-            if intf.status != intf_dict["status"]:
-                intf_dict["status"] = intf.status
-                oper_changes.append(f"Changed interface.status {intf.status}")
+            if intf.status.value != intf_dict["status"]:
+                intf_dict["status"] = intf.status.value
+                oper_changes.append(f"Changed interface.status {intf.status.value}")
             if intf.is_enabled() != intf_dict["enabled"]:
                 intf_dict["enabled"] = intf.is_enabled()
                 admin_changes.append(f"Changed interface.enabled {intf.is_enabled()}")
@@ -253,9 +253,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 self._topo_dict["links"][link.id] = deepcopy(link.as_dict())
                 admin_changes.append(f"Added link {link.id}")
                 continue
-            if link.status != link_dict["status"]:
-                link_dict["status"] = link.status
-                oper_changes.append(f"Changed link.status {link.status}")
+            if link.status.value != link_dict["status"]:
+                link_dict["status"] = link.status.value
+                oper_changes.append(f"Changed link.status {link.status.value}")
             if link.is_enabled() != link_dict["enabled"]:
                 link_dict["enabled"] = link.is_enabled()
                 admin_changes.append(f"Changed link.enabled {link.is_enabled()}")
