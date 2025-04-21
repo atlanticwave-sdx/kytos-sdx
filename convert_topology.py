@@ -163,7 +163,7 @@ class ParseConvertTopology:
         if vlan_range is None:
             vlan_range = self.override_vlan_range
             if vlan_range is None:
-                vlan_range = interface.get("tag_ranges", [[1, 4095]])
+                vlan_range = interface.get("tag_ranges", [[1, 4094]])
 
         sdx_port["services"] = {
             # "l2vpn-ptmp":{"vlan_range": vlan_range}
