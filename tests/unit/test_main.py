@@ -60,7 +60,7 @@ class TestMain:
         mock_res1.json.return_value = {"topology": get_topology_dict()}
         mock_res2.status_code = 200
         mock_res2.json.return_value = {
-            "aa:00:00:00:00:00:00:02:50": {"tag_ranges": {"vlan": [[1, 4095]]}}
+            "aa:00:00:00:00:00:00:02:50": {"tag_ranges": {"vlan": [[1, 4094]]}}
         }
         requests_mock.side_effect = [mock_res1, mock_res2]
         self.napp.handler_on_topology_loaded()
