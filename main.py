@@ -691,10 +691,11 @@ class Main(KytosNApp):  # pylint: disable=R0904
                         msg_err = f"Invalid VLAN for L2VPN creation: {msg}"
                         log.warn(f"{msg_err} -- request={content}")
                         raise HTTPException(400, detail=msg_err)
-                    evc_dict[attr]["tag"] = {
-                        "tag_type": "vlan",
-                        "value": sdx_vlan,
-                    }
+                    if sdx_vlan:
+                        evc_dict[attr]["tag"] = {
+                            "tag_type": "vlan",
+                            "value": sdx_vlan,
+                        }
             elif attr == "name":
                 evc_dict[attr] = self.name_prefix + content[attr]
             else:
