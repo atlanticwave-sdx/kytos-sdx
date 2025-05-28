@@ -731,6 +731,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         kuni_a = self.sdx2kytos.get(uni_a)
         kuni_z = self.sdx2kytos.get(uni_z)
+        kvlan_a, _ = self.parse_vlan(vlan_a)
+        kvlan_z, _ = self.parse_vlan(vlan_z)
+        if not all([kuni_a, kvlan_a, kuni_z, kvlan_z]):
+            msg = "Delete EVC failed: invalid attribute."
+            log.warn(f"{msg}: {kuni_a=} {kvlan_a=} {kuni_z=} {kvlan_z=}")
+            return JSONResponse({"result": msg}, 400)
 
         try:
             response = requests.get(KYTOS_EVC_URL, timeout=30)
@@ -747,9 +753,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
             if all(
                 [
                     evc["uni_a"]["interface_id"] == kuni_a,
-                    evc["uni_a"].get("tag", {}).get("value") == vlan_a,
+                    evc["uni_a"].get("tag", {}).get("value") == kvlan_a,
                     evc["uni_z"]["interface_id"] == kuni_z,
-                    evc["uni_z"].get("tag", {}).get("value") == vlan_z,
+                    evc["uni_z"].get("tag", {}).get("value") == kvlan_z,
                 ]
             ):
                 break
