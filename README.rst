@@ -142,6 +142,9 @@ Create L2VPN with new API
 	# Example 04: example with all possible attributes
 	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_503_503", "endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "501"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "501"}], "description": "test foobar xpto aa bbb", "scheduling": {"start_time": "2024-08-07T19:55:00Z", "end_time": "2024-08-07T19:58:00Z"}, "notifications": [{"email": "user@domain.com"},{"email": "user2@domain2.com"}], "qos_metrics": {"min_bw": {"value": 5,"strict": false}, "max_delay": {"value": 150, "strict": true}}}'
 
+	# Example 05: minimal attributes with endpoint.0 being untagged (frames without 802.1q header)
+	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_untagged_503", "endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "untagged"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "503"}]}'
+
 
 Edit L2VPN with new API
 *************************

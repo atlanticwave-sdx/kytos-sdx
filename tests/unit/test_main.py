@@ -133,7 +133,8 @@ class TestMain:
         assert unordered(converted_topo["links"]) == expected["links"]
 
     @patch("time.sleep", return_value=None)
-    def test_update_topology_metadata_success_case(self, _):
+    @patch("napps.kytos.sdx.main.log.warning")
+    def test_update_topology_metadata(self, log_mock, _):
         """Test update metadata method to success case."""
         self.napp._topo_dict = get_topology_dict()
         self.napp.sdx_topology = {"version": 1, "timestamp": "2024-07-18T15:33:12Z"}
@@ -188,6 +189,16 @@ class TestMain:
         )
         assert res_link["residual_bandwidth"] == 90
 
+        # Test 4: invalid interface metadata
+        interface._id = "aa:00:00:00:00:00:00:02:999"
+        event = KytosEvent(
+            name="kytos/topology.interfaces.metadata.added",
+            content={"interface": interface, "metadata": interface.metadata.copy()},
+        )
+        log_mock.call_count = 0
+        self.napp.handle_metadata_event(event)
+        log_mock.assert_called()
+
     async def test_get_topology_response(self):
         """Test shortest path."""
         self.napp.controller.loop = asyncio.get_running_loop()
@@ -235,6 +246,32 @@ class TestMain:
         assert response.status_code == 201
         assert response.json() == {"service_id": "a123"}
 
+        # Test 2: invalid endpoints
+        endpoint2 = payload["endpoints"].pop()
+        response = await self.api_client.post(
+            f"{self.endpoint}/l2vpn/1.0",
+            json=payload,
+        )
+        assert response.status_code == 402
+
+        # Test 3: invalid request payload
+        payload["endpoints"].append(endpoint2)
+        payload["endpoints"][1]["port_id"] = "urn:sdx:port:testoxp.net:TestSw3:9999"
+        response = await self.api_client.post(
+            f"{self.endpoint}/l2vpn/1.0",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # Test 4: failed to submit request to mef_eline
+        payload["endpoints"][1]["port_id"] = "urn:sdx:port:testoxp.net:TestSw3:50"
+        requests_mock.return_value.status_code = 400
+        response = await self.api_client.post(
+            f"{self.endpoint}/l2vpn/1.0",
+            json=payload,
+        )
+        assert response.status_code == 400
+
     def test_handler_on_topology_loaded(self):
         """Test handler_on_topology_loaded."""
         self.napp.get_kytos_topology = MagicMock()
@@ -268,6 +305,23 @@ class TestMain:
         )
         assert response.status_code == 201
 
+        # Test 2: invalid request payload
+        payload["endpoints"][1]["port_id"] = "urn:sdx:port:testoxp.net:TestSw1:9999"
+        response = await self.api_client.patch(
+            f"{self.endpoint}/l2vpn/1.0/a123",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # Test 3: failed to submit request to Kytos
+        payload["endpoints"][1]["port_id"] = "urn:sdx:port:testoxp.net:TestSw1:40"
+        req_patch_mock.return_value = MagicMock(status_code=400)
+        response = await self.api_client.patch(
+            f"{self.endpoint}/l2vpn/1.0/a123",
+            json=payload,
+        )
+        assert response.status_code == 400
+
     @patch("requests.delete")
     async def test_delete_l2vpn(self, requests_mock):
         """Test delete a l2vpn."""
@@ -279,6 +333,27 @@ class TestMain:
             f"{self.endpoint}/l2vpn/1.0/a123",
         )
         assert response.status_code == 201
+
+        # test 2: failed to submit request to Kytos
+        requests_mock.return_value.status_code = 400
+        response = await self.api_client.delete(
+            f"{self.endpoint}/l2vpn/1.0/a123",
+        )
+        assert response.status_code == 400
+
+        # test 3: failed to submit request to Kytos - not found
+        requests_mock.return_value.status_code = 404
+        response = await self.api_client.delete(
+            f"{self.endpoint}/l2vpn/1.0/a123",
+        )
+        assert response.status_code == 404
+
+        # test 4: failed to submit request to Kytos - exception
+        requests_mock.side_effect = ValueError("err")
+        response = await self.api_client.delete(
+            f"{self.endpoint}/l2vpn/1.0/a123",
+        )
+        assert response.status_code == 400
 
     @patch("requests.post")
     async def test_create_l2vpn_old_api(self, requests_mock):
@@ -310,6 +385,66 @@ class TestMain:
         )
         assert response.status_code == 200
         assert response.json() == {"circuit_id": "a123"}
+
+        # test 2: testing with VLAN 'all'
+        payload["uni_a"]["tag"]["value"] = "all"
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 200
+        requests_mock.assert_called_with(
+            "http://127.0.0.1:8181/api/kytos/mef_eline/v2/evc/",
+            json={
+                "name": "SDX-L2VPN-Vlan_test_123",
+                "uni_a": {"interface_id": "aa:00:00:00:00:00:00:03:50"},
+                "uni_z": {
+                    "interface_id": "aa:00:00:00:00:00:00:01:40",
+                    "tag": {"tag_type": "vlan", "value": 501},
+                },
+                "dynamic_backup_path": True,
+            },
+            timeout=30,
+        )
+
+        # test 3: invalid payload (invalid vlan)
+        payload["uni_a"]["tag"]["value"] = "invalid"
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # test 4: invalid payload (missing attribute)
+        uni_a = payload.pop("uni_a")
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # restore
+        payload["uni_a"] = uni_a
+        payload["uni_a"]["tag"]["value"] = 501
+
+        # test 5: invalid payload (invalid port_id)
+        payload["uni_a"]["port_id"] = "invalid"
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # restore
+        payload["uni_a"]["port_id"] = "urn:sdx:port:testoxp.net:TestSw3:50"
+
+        # test 6: failed to submit request to mef_eline
+        requests_mock.return_value.status_code = 400
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
 
     @patch("requests.get")
     @patch("requests.delete")
@@ -358,6 +493,55 @@ class TestMain:
         )
         assert response.status_code == 200
 
+        # test 2: invalid payload (missing attribute)
+        uni_a = payload.pop("uni_a")
+        response = await self.api_client.request(
+            "DELETE",
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # test 3: invalid payload (invalid VLAN)
+        payload["uni_a"] = uni_a
+        payload["uni_a"]["tag"]["value"] = "invalid"
+        response = await self.api_client.request(
+            "DELETE",
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # test 4: failed to get EVCs
+        payload["uni_a"]["tag"]["value"] = 501
+        req_get_mock.return_value.status_code = 400
+        response = await self.api_client.request(
+            "DELETE",
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # test 5: EVC not found
+        payload["uni_a"]["tag"]["value"] = 999
+        req_get_mock.return_value.status_code = 200
+        response = await self.api_client.request(
+            "DELETE",
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # test 6: failed to delete the EVC on mef_eline
+        payload["uni_a"]["tag"]["value"] = 501
+        req_del_mock.return_value.status_code = 500
+        response = await self.api_client.request(
+            "DELETE",
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
     def test_parse_vlan(self):
         """Test parse_vlan()."""
         # case 1: invalid
@@ -374,7 +558,7 @@ class TestMain:
         assert msg is None
         # case 4: range - valid
         vlan, msg = self.napp.parse_vlan("1:100")
-        assert vlan == [1, 100]
+        assert vlan == [[1, 100]]
         assert msg is None
         # case 5: range - invalid
         vlan, msg = self.napp.parse_vlan("1:9999")
@@ -399,3 +583,19 @@ class TestMain:
         )
         assert response.status_code == 200
         assert response.json() == get_evc_converted()
+
+        # test 2: failed to get EVCs from mef_eline
+        req_get_mock.return_value.status_code = 404
+        response = await self.api_client.request(
+            "GET",
+            f"{self.endpoint}/l2vpn/1.0/88c326c7e70d49",
+        )
+        assert response.status_code == 404
+
+        # test 3: failed to get EVCs - exception
+        req_get_mock.side_effect = ValueError("err")
+        response = await self.api_client.request(
+            "GET",
+            f"{self.endpoint}/l2vpn/1.0/88c326c7e70d49",
+        )
+        assert response.status_code == 400
