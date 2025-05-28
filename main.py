@@ -633,6 +633,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 assert 1 <= sdx_vlan[1] <= 4095
             except (AttributeError, ValueError, AssertionError):
                 return None, f"Invalid vlan range on endpoint ({sdx_vlan})"
+            sdx_vlan = [sdx_vlan]
         return sdx_vlan, None
 
     @rest("l2vpn/1.0/{service_id}", methods=["DELETE"])
