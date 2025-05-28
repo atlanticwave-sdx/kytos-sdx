@@ -311,6 +311,24 @@ class TestMain:
         assert response.status_code == 200
         assert response.json() == {"circuit_id": "a123"}
 
+        # test 2: invalid payload
+        payload["uni_a"]["tag"]["value"] = "invalid"
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 400
+
+        # test 3: testing with VLAN 'all'
+        payload["uni_a"]["tag"]["value"] = "all"
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp",
+            json=payload,
+        )
+        assert response.status_code == 200
+        requests_mock.assert_called_with(json={})
+
+
     @patch("requests.get")
     @patch("requests.delete")
     async def test_delete_l2vpn_old_api(self, req_del_mock, req_get_mock):
