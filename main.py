@@ -613,7 +613,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         # "any" -> Not Supported! the OXPO wont choose the VLAN, not supported
         # "untagged" -> untagged: no conversion
         # "xx:yy" -> [xx, yy]: VLAN range
-        if sdx_vlan.isdigit():
+        if sdx_vlan.isdigit() or isinstance(sdx_vlan, int):
             sdx_vlan = int(sdx_vlan)
             if sdx_vlan < 1 or sdx_vlan > 4095:
                 return None, f"Invalid vlan {sdx_vlan} on endpoint (0 > vlan < 4096)"
@@ -686,7 +686,15 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     return JSONResponse({"result": msg}, 400)
                 evc_dict[attr]["interface_id"] = kytos_id
                 if "tag" in content[attr]:
-                    evc_dict[attr]["tag"] = content[attr]["tag"]
+                    sdx_vlan, msg = self.parse_vlan(content[attr]["tag"]["value"])
+                    if sdx_vlan is None:
+                        msg_err = f"Invalid VLAN for L2VPN creation: {msg}"
+                        log.warn(f"{msg_err} -- request={content}")
+                        raise HTTPException(400, detail=msg_err)
+                    evc_dict[attr]["tag"] = {
+                        "tag_type": "vlan",
+                        "value": sdx_vlan,
+                    }
             elif attr == "name":
                 evc_dict[attr] = self.name_prefix + content[attr]
             else:
