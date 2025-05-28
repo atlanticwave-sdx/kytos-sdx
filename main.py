@@ -290,7 +290,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
         else:
             switch_dict = self._topo_dict["switches"].get(obj.id[:23])
             if not switch_dict or obj.id not in switch_dict["interfaces"]:
-                log.warn(f"Metadata event for unknown obj {obj.id} event={event.name}")
+                log.warning(
+                    f"Metadata event for unknown obj {obj.id} event={event.name}"
+                )
                 return
             obj_dict = switch_dict["interfaces"][obj.id]
 
@@ -423,12 +425,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
         # Sanity check: only supports 2 endpoints (PTP L2VPN)
         if len(content["endpoints"]) != 2:
             msg = "Only PTP L2VPN is supported: expecting exactly 2 endpoints"
-            log.warn(f"EVC creation failed: {msg}. request={content}")
+            log.warning(f"EVC creation failed: {msg}. request={content}")
             return JSONResponse({"description": msg}, 402)
 
         evc_dict, code, msg = self.parse_evc(content)
         if not evc_dict:
-            log.warn(f"EVC creation failed: {msg}. request={content}")
+            log.warning(f"EVC creation failed: {msg}. request={content}")
             return JSONResponse({"description": msg}, code)
 
         try:
@@ -437,7 +439,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             circuit_id = response.json()["circuit_id"]
         except Exception as exc:  # pylint: disable=broad-exception-caught
             err = traceback.format_exc().replace("\n", ", ")
-            log.warn(f"EVC creation failed: {exc} - {err}")
+            log.warning(f"EVC creation failed: {exc} - {err}")
             return JSONResponse(
                 {"description": "L2VPN creation failed: check logs"}, 400
             )
@@ -453,7 +455,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             response = requests.get(f"{KYTOS_EVC_URL}{evcid}", timeout=30)
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
-            log.warn(f"GET EVC failed on Kytos: {exc} - {err}")
+            log.warning(f"GET EVC failed on Kytos: {exc} - {err}")
             raise HTTPException(
                 400, detail=f"Failed to get EVC from Kytos: {exc}"
             ) from exc
@@ -475,7 +477,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         evc_dict, code, msg = self.parse_evc(content)
         if not evc_dict:
-            log.warn(f"EVC update failed: {msg}. request={content}")
+            log.warning(f"EVC update failed: {msg}. request={content}")
             return JSONResponse({"description": msg}, code)
 
         # we handle metadata differently otherwise Kytos would overwrite it
@@ -494,7 +496,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 assert response.status_code == 201, response.text
         except Exception as exc:  # pylint: disable=broad-exception-caught
             err = traceback.format_exc().replace("\n", ", ")
-            log.warn(f"EVC creation failed: {exc} - {err}")
+            log.warning(f"EVC creation failed: {exc} - {err}")
             return JSONResponse(
                 {"description": "L2VPN editing failed: check logs"}, 400
             )
@@ -645,7 +647,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             response = requests.delete(f"{KYTOS_EVC_URL}{evcid}", timeout=30)
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
-            log.warn(f"Delete EVC failed on Kytos: {exc} - {err}")
+            log.warning(f"Delete EVC failed on Kytos: {exc} - {err}")
             raise HTTPException(
                 400, detail=f"Delete EVC failed on Kytos: {exc}"
             ) from exc
@@ -655,7 +657,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 {"description": "L2VPN Service ID provided does not exist"}, 404
             )
         if response.status_code != 200:
-            log.warn(f"Delete EVC failed on Kytos: {response.text}")
+            log.warning(f"Delete EVC failed on Kytos: {response.text}")
             return JSONResponse({"description": "Failed to delete L2VPN service"}, 400)
 
         return JSONResponse("L2VPN Deleted", 201)
@@ -675,21 +677,21 @@ class Main(KytosNApp):  # pylint: disable=R0904
         for attr in evc_dict:  # pylint: disable=consider-using-dict-items
             if attr not in content:
                 msg = f"missing attribute {attr}"
-                log.warn(f"EVC creation failed: {msg}. request={content}")
+                log.warning(f"EVC creation failed: {msg}. request={content}")
                 return JSONResponse({"result": msg}, 400)
             if "uni_" in attr:
                 sdx_id = content[attr].get("port_id")
                 kytos_id = self.sdx2kytos.get(sdx_id)
                 if not sdx_id or not kytos_id:
                     msg = f"unknown value for {attr}.port_id ({sdx_id})"
-                    log.warn(f"EVC creation failed: {msg}. request={content}")
+                    log.warning(f"EVC creation failed: {msg}. request={content}")
                     return JSONResponse({"result": msg}, 400)
                 evc_dict[attr]["interface_id"] = kytos_id
                 if "tag" in content[attr]:
                     sdx_vlan, msg = self.parse_vlan(content[attr]["tag"]["value"])
                     if sdx_vlan is None:
                         msg_err = f"Invalid VLAN for L2VPN creation: {msg}"
-                        log.warn(f"{msg_err} -- request={content}")
+                        log.warning(f"{msg_err} -- request={content}")
                         raise HTTPException(400, detail=msg_err)
                     if sdx_vlan:
                         evc_dict[attr]["tag"] = {
@@ -706,7 +708,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             assert response.status_code == 201, response.text
         except Exception as exc:
             err = traceback.format_exc().replace("\n", ", ")
-            log.warn(f"EVC creation failed: {exc} - {err}")
+            log.warning(f"EVC creation failed: {exc} - {err}")
             raise HTTPException(400, detail=f"Request to Kytos failed: {exc}") from exc
 
         return JSONResponse(response.json(), 200)
@@ -726,7 +728,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 "Delete EVC failed: missing attribute."
                 f"{uni_a=} {vlan_a=} {uni_z=} {vlan_z=}"
             )
-            log.warn(msg)
+            log.warning(msg)
             return JSONResponse({"result": msg}, 400)
 
         kuni_a = self.sdx2kytos.get(uni_a)
@@ -735,7 +737,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         kvlan_z, _ = self.parse_vlan(vlan_z)
         if not all([kuni_a, kvlan_a, kuni_z, kvlan_z]):
             msg = "Delete EVC failed: invalid attribute."
-            log.warn(f"{msg}: {kuni_a=} {kvlan_a=} {kuni_z=} {kvlan_z=}")
+            log.warning(f"{msg}: {kuni_a=} {kvlan_a=} {kuni_z=} {kvlan_z=}")
             return JSONResponse({"result": msg}, 400)
 
         try:
@@ -743,7 +745,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             assert response.status_code == 200, response.text
             evcs = response.json()
         except Exception as exc:
-            log.warn(
+            log.warning(
                 f"EVC query failed on Kytos: {exc} - "
                 + traceback.format_exc().replace("\n", ", ")
             )
@@ -761,14 +763,14 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 break
         else:
             msg = f"EVC not found: {uni_a=} {vlan_a=} {uni_z=} {vlan_z=}"
-            log.warn(msg)
+            log.warning(msg)
             raise HTTPException(400, detail=msg)
 
         try:
             response = requests.delete(f"{KYTOS_EVC_URL}{evcid}", timeout=30)
             assert response.status_code == 200, response.text
         except Exception as exc:
-            log.warn(
+            log.warning(
                 f"Delete EVC failed on Kytos: {exc} - "
                 + traceback.format_exc().replace("\n", ", ")
             )
