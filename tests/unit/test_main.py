@@ -374,7 +374,7 @@ class TestMain:
         assert msg is None
         # case 4: range - valid
         vlan, msg = self.napp.parse_vlan("1:100")
-        assert vlan == [1, 100]
+        assert vlan == [[1, 100]]
         assert msg is None
         # case 5: range - invalid
         vlan, msg = self.napp.parse_vlan("1:9999")
