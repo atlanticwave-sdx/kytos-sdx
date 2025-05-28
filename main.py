@@ -613,7 +613,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         # "any" -> Not Supported! the OXPO wont choose the VLAN, not supported
         # "untagged" -> untagged: no conversion
         # "xx:yy" -> [xx, yy]: VLAN range
-        if sdx_vlan.isdigit() or isinstance(sdx_vlan, int):
+        if isinstance(sdx_vlan, int) or sdx_vlan.isdigit():
             sdx_vlan = int(sdx_vlan)
             if sdx_vlan < 1 or sdx_vlan > 4095:
                 return None, f"Invalid vlan {sdx_vlan} on endpoint (0 > vlan < 4096)"
