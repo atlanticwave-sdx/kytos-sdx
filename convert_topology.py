@@ -218,10 +218,13 @@ class ParseConvertTopology:
 
         sdx_node["id"] = f"urn:sdx:node:{self.oxp_url}:{sdx_node['name']}"
 
+        node_md = kytos_node["metadata"]
+        sdx_location = node_md.get("sdx_location")
+
         sdx_node["location"] = {
-            "address": kytos_node["metadata"].get("address", ""),
-            "latitude": float(kytos_node["metadata"].get("lat", 0)),
-            "longitude": float(kytos_node["metadata"].get("lng", 0)),
+            "address": sdx_location.get("address", node_md.get("address", "")),
+            "latitude": float(sdx_location.get("lat", node_md.get("lat", 0))),
+            "longitude": float(sdx_location.get("lng", node_md.get("lng", 0))),
             "iso3166_2_lvl4": kytos_node["metadata"].get("iso3166_2_lvl4", ""),
             "private": [],
         }
