@@ -49,6 +49,8 @@ The Kytos SDX Napp exports information about the Kytos topology to the SDX Local
 
 - `Switch.metadata.iso3166_2_lvl4`: this metadata should be set to a string containing the short and unique alphanumeric codes representing the state (or other administrative divisions) and country. Example: "FL-US" (Florida - USA). Another example: "SP-BR" (Sao Paulo - Brazil)
 
+- `Switch.metadata.sdx_location`: this metadata should be set to a dictionary containing the keys `lat`, `lng` and `address` and it will be used to overwrite the `Switch.metadata.lat`, `Switch.metadata.lng` and `Switch.metadata.address` respectively. This attribute is optional, and if not present, the standard ones will be used from metadata. If you want to overwrite only one of them, just define one. 
+
 - `Interface.metadata.sdx_vlan_range`: VLAN range that should be allowed for SDX to use when creating point-to-point L2VPN on Kytos (aka MEF-Eline EVCs). The format for this attribute is a list of tuples, where each tuple contains the range's first and last VLAN ID. Example: [[1, 4095]] (include all VLANs). Another example: [[1, 100], [300, 300]] (include VLANs 1 to 100 and VLAN 300)
 
 - `Interface.metadata.sdx_nni`: the `sdx_nni` attribute must only be set if that interface connects your OXP to another OXP (the boundary between two domains). In this case, it has to be a string representing the remote OXP's Port ID (format: "urn:sdx:port:<oxp_url>:<node_name>:<port_name>"). Example: suppose the port is an AmLight port connected to ZAOXI OXP, with the remote node at ZAOXI being "s1" and remote port at ZAOXI being "50" then the `sdx_nni` attribute on the AmLight topology side is set to "urn:sdx:port:zaoxi.ac.za:s1:50".
