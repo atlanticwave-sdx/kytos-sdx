@@ -219,7 +219,7 @@ class ParseConvertTopology:
         sdx_node["id"] = f"urn:sdx:node:{self.oxp_url}:{sdx_node['name']}"
 
         node_md = kytos_node["metadata"]
-        sdx_location = node_md.get("sdx_location")
+        sdx_location = node_md.get("sdx_location", {})
 
         sdx_node["location"] = {
             "address": sdx_location.get("address", node_md.get("address", "")),
