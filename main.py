@@ -630,7 +630,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             try:
                 start, end = sdx_vlan.split(":")
                 sdx_vlan = [int(start), int(end)]
-                assert sdx_vlan[0] < sdx_vlan[1]
+                assert sdx_vlan[0] <= sdx_vlan[1]
                 assert 1 <= sdx_vlan[0] <= 4095
                 assert 1 <= sdx_vlan[1] <= 4095
             except (AttributeError, ValueError, AssertionError):
