@@ -580,6 +580,14 @@ class TestMain:
         vlan, msg = self.napp.parse_vlan("100-200")
         assert vlan is None
         assert "Invalid vlan range" in msg
+        # case 10: integer - valid
+        vlan, msg = self.napp.parse_vlan(100)
+        assert vlan == 100
+        assert msg is None
+        # case 11: range - invalid format (float:float)
+        vlan, msg = self.napp.parse_vlan("100.1:200.2")
+        assert vlan is None
+        assert "Invalid vlan range" in msg
 
     @patch("requests.get")
     async def test_get_l2vpn_api(self, req_get_mock):
