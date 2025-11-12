@@ -446,6 +446,28 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         return JSONResponse({"service_id": circuit_id}, 201)
 
+    @rest("l2vpn/1.0", methods=["GET"])
+    def get_all_l2vpns(self, _request: Request) -> JSONResponse:
+        """REST to get all L2VPNs."""
+        try:
+            response = requests.get(
+                f"{KYTOS_EVC_URL}?metadata.sdx_l2vpn=true", timeout=30
+            )
+            assert response.status_code == 200, response.text
+            data = response.json()
+        except Exception as exc:
+            err = traceback.format_exc().replace("\n", ", ")
+            log.warning(f"GET EVC failed on Kytos: {exc} - {err}")
+            raise HTTPException(
+                400, detail=f"Failed to get EVCs from Kytos: {exc}"
+            ) from exc
+
+        all_l2vpns = {}
+        for evc_id, evc_dict in data.items():
+            all_l2vpns[evc_id] = self.parse_kytos_to_sdx(evc_dict)
+
+        return JSONResponse(all_l2vpns, 200)
+
     @rest("l2vpn/1.0/{service_id}", methods=["GET"])
     def get_l2vpn(self, request: Request) -> JSONResponse:
         """REST to GET L2VPN."""
@@ -541,15 +563,17 @@ class Main(KytosNApp):  # pylint: disable=R0904
         if "max_number_oxps" in content.get("qos_metrics", {}):
             return None, 422, "Invalid qos_metrics.max_number_oxps for OXP"
 
-        evc_dict = {}
+        evc_dict = {
+            "metadata": {
+                "sdx_l2vpn": True,
+            },
+        }
 
         if "name" in content:
             evc_dict["name"] = self.name_prefix + content["name"]
         if "description" in content:
-            evc_dict.setdefault("metadata", {})
             evc_dict["metadata"]["sdx_description"] = content["description"]
         if "notifications" in content:
-            evc_dict.setdefault("metadata", {})
             evc_dict["metadata"]["sdx_notifications"] = content["notifications"]
         if sched_start != MIN_TIME:
             evc_dict["circuit_scheduler"] = [{"date": sched_start, "action": "create"}]

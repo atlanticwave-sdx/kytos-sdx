@@ -12,7 +12,7 @@ General Information
 
 Added
 =====
--
+- Export all L2VPN created
 
 Changed
 =======
