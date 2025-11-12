@@ -623,3 +623,47 @@ class TestMain:
             f"{self.endpoint}/l2vpn/1.0/88c326c7e70d49",
         )
         assert response.status_code == 400
+
+    @patch("requests.get")
+    async def test_get_all_l2vpns_api(self, req_get_mock):
+        """Test get a l2vpn using API."""
+        mock_res = MagicMock()
+        mock_res.status_code = 200
+        mock_res.json.return_value = {"88c326c7e70d49": get_evc()}
+        req_get_mock.return_value = mock_res
+        self.napp.controller.loop = asyncio.get_running_loop()
+        self.napp.kytos2sdx = {
+            "aa:00:00:00:00:00:00:03:50": "urn:sdx:port:ampath.net:Ampath3:50",
+            "aa:00:00:00:00:00:00:02:40": "urn:sdx:port:ampath.net:Ampath2:40",
+        }
+        response = await self.api_client.request(
+            "GET",
+            f"{self.endpoint}/l2vpn/1.0/",
+        )
+        assert response.status_code == 200
+        assert response.json() == {"88c326c7e70d49": get_evc_converted()}
+
+        # test 2: empty reply from mef_eline
+        req_get_mock.return_value.json.return_value = {}
+        response = await self.api_client.request(
+            "GET",
+            f"{self.endpoint}/l2vpn/1.0/",
+        )
+        assert response.status_code == 200
+        assert response.json() == {}
+
+        # test 3: failed to get EVCs from mef_eline
+        req_get_mock.return_value.status_code = 400
+        response = await self.api_client.request(
+            "GET",
+            f"{self.endpoint}/l2vpn/1.0/",
+        )
+        assert response.status_code == 400
+
+        # test 4: failed to get EVCs - exception
+        req_get_mock.side_effect = ValueError("err")
+        response = await self.api_client.request(
+            "GET",
+            f"{self.endpoint}/l2vpn/1.0/",
+        )
+        assert response.status_code == 400
