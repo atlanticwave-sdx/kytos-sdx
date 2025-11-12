@@ -178,6 +178,60 @@ Get L2VPN with new API
 
 	curl -s http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/ea492fd1238e4a
 
+Get All L2VPNs with new API
+**************************
+
+- Get all L2VPNs using the *new* Provisioning API:
+
+.. code-block:: shell
+
+	curl -s http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/
+
+Example:
+
+.. code-block:: shell
+
+	$ curl -s http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0/
+	{
+	  "9527364d53ad48": {
+	    "name": "SDX-L2VPN-AMPATH_vlan_4094_4",
+	    "id": "9527364d53ad48",
+	    "creation_date": "2025-11-12T14:15:57",
+	    "last_modified": "2025-11-12T14:15:57",
+	    "status": "up",
+	    "state": "enabled",
+	    "endpoints": [
+	      {
+	        "port_id": "urn:sdx:port:ampath.net:Ampath1:50",
+	        "vlan": 4094
+	      },
+	      {
+	        "port_id": "urn:sdx:port:ampath.net:Ampath1:40",
+	        "vlan": 4
+	      }
+	    ]
+	  },
+	  "a59f6683fc144f": {
+	    "name": "SDX-L2VPN-AMPATH_vlan_4094_1",
+	    "id": "a59f6683fc144f",
+	    "creation_date": "2025-11-12T14:15:58",
+	    "last_modified": "2025-11-12T14:15:58",
+	    "status": "up",
+	    "state": "enabled",
+	    "endpoints": [
+	      {
+	        "port_id": "urn:sdx:port:ampath.net:Ampath2:50",
+	        "vlan": 4094
+	      },
+	      {
+	        "port_id": "urn:sdx:port:ampath.net:Ampath2:40",
+	        "vlan": 1
+	      }
+	    ]
+	  }
+	}
+
+
 .. TAGs
 
 .. |Stable| image:: https://img.shields.io/badge/stability-stable-green.svg
