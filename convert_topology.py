@@ -106,7 +106,7 @@ class ParseConvertTopology:
         if link_name:
             link_name = re.sub(r"\s+", "_", link_name)
             link_name = re.sub("[^A-Za-z0-9_.,/-]", "", link_name)
-            return link_name[:30]
+            return link_name[:100]
         interface_a = int(kytos_link["endpoint_a"]["id"][24:])
         switch_a = kytos_link["endpoint_a"]["id"][:23]
         interface_b = int(kytos_link["endpoint_b"]["id"][24:])
