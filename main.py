@@ -407,14 +407,16 @@ class Main(KytosNApp):  # pylint: disable=R0904
     @rest("topology/2.0.0", methods=["GET"])
     def get_sdx_topology_v2(self, _request: Request) -> JSONResponse:
         """return sdx topology v2"""
-        if not self._converted_topo.get("nodes"):
-            return JSONResponse({}, status_code=200)
-        return JSONResponse(self._converted_topo)
+        with self._topo_lock:
+            if not self._converted_topo.get("nodes"):
+                return JSONResponse({}, status_code=200)
+            return JSONResponse(self._converted_topo)
 
     @rest("topology/2.0.0", methods=["POST"])
     def send_topology_to_sdxlc(self, _request: Request) -> JSONResponse:
         """Send the topology (v2) to SDX-LC"""
-        self.post_topology_to_sdxlc(self._converted_topo)
+        with self._topo_lock:
+            self.post_topology_to_sdxlc(self._converted_topo)
         return JSONResponse("Operation successful", status_code=200)
 
     @rest("l2vpn/1.0", methods=["POST"])
