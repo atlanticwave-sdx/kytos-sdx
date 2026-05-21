@@ -202,7 +202,7 @@ class ParseConvertTopology:
         if "node_name" in switch["metadata"]:
             return switch["metadata"]["node_name"][:30]
         if len(switch["data_path"]) <= 30:
-            return switch["data_path"]
+            return re.sub("[^A-Za-z0-9_.,/-]", "", switch["data_path"])
         return switch["dpid"].replace(":", "-")
 
     def get_sdx_node(self, kytos_node: dict) -> dict:
@@ -211,10 +211,7 @@ class ParseConvertTopology:
         and list of ports."""
         sdx_node = {}
 
-        if "node_name" in kytos_node["metadata"]:
-            sdx_node["name"] = kytos_node["metadata"]["node_name"]
-        else:
-            sdx_node["name"] = kytos_node["data_path"]
+        sdx_node["name"] = self.get_kytos_node_name(kytos_node["dpid"])
 
         sdx_node["id"] = f"urn:sdx:node:{self.oxp_url}:{sdx_node['name']}"
 
