@@ -16,7 +16,7 @@ Added
 
 Changed
 =======
--
+- Handle case where the switch may not have the metadata.node_name, and data_path could contain invalid chars
 
 Fixed
 =====
