@@ -272,6 +272,17 @@ class TestMain:
         )
         assert response.status_code == 400
 
+        # Test 5: unsupported vlan "any" must return 400, not crash (issue #102)
+        requests_mock.return_value.status_code = 201
+        payload["endpoints"][0]["vlan"] = "any"
+        payload["endpoints"][1]["vlan"] = "any"
+        response = await self.api_client.post(
+            f"{self.endpoint}/l2vpn/1.0",
+            json=payload,
+        )
+        assert response.status_code == 400
+        assert "any" in response.json()["description"]
+
     def test_handler_on_topology_loaded(self):
         """Test handler_on_topology_loaded."""
         self.napp.get_kytos_topology = MagicMock()
