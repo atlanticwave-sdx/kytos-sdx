@@ -622,7 +622,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
             evc_dict[uni]["interface_id"] = kytos_id
             sdx_vlan, msg = self.parse_vlan(endpoint["vlan"])
             if sdx_vlan is None:
-                return None, msg
+                return None, 400, msg
             if sdx_vlan:
                 evc_dict[uni]["tag"] = {
                     "tag_type": "vlan",
