@@ -23,6 +23,7 @@ from .settings import (
     KYTOS_EVC_URL,
     KYTOS_TAGS_URL,
     KYTOS_TOPOLOGY_URL,
+    MAX_VLAN_RETRIES,
     NAME_PREFIX,
     OVERRIDE_VLAN_RANGE,
     OXPO_NAME,
@@ -35,10 +36,6 @@ from .utils import get_timestamp
 
 MIN_TIME = "0000-00-00T00:00:00Z"
 MAX_TIME = "9999-99-99T99:99:99Z"
-
-# Max attempts to resolve a vlan="any" endpoint when mef_eline rejects the
-# chosen VLAN as unavailable (TOCTOU between availability check and reservation)
-MAX_VLAN_RETRIES = 3
 
 
 class Main(KytosNApp):  # pylint: disable=R0904

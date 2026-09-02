@@ -39,3 +39,8 @@ SDX_DEF_INCLUDE = {"switch": True, "interface": True, "link": True}
 # tag_ranges. Example:
 # OVERRIDE_VLAN_RANGE = [[100, 200]]
 OVERRIDE_VLAN_RANGE = None
+
+# MAX_VLAN_RETRIES: max attempts to resolve a vlan="any" endpoint when
+# mef_eline rejects the chosen VLAN as unavailable (TOCTOU between the
+# availability check and mef_eline's reservation)
+MAX_VLAN_RETRIES = 3
