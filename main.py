@@ -2,6 +2,8 @@
 Main module of amlight/sdx Kytos Network Application.
 """
 
+# pylint: disable=too-many-lines
+
 import os
 import threading
 import time
@@ -21,6 +23,7 @@ from .settings import (
     KYTOS_EVC_URL,
     KYTOS_TAGS_URL,
     KYTOS_TOPOLOGY_URL,
+    MAX_VLAN_RETRIES,
     NAME_PREFIX,
     OVERRIDE_VLAN_RANGE,
     OXPO_NAME,
@@ -430,23 +433,56 @@ class Main(KytosNApp):  # pylint: disable=R0904
             log.warning(f"EVC creation failed: {msg}. request={content}")
             return JSONResponse({"description": msg}, 402)
 
-        evc_dict, code, msg = self.parse_evc(content)
-        if not evc_dict:
-            log.warning(f"EVC creation failed: {msg}. request={content}")
-            return JSONResponse({"description": msg}, code)
+        # endpoints requesting vlan="any" that may need a retry with a
+        # different VLAN if mef_eline rejects the chosen one (TOCTOU)
+        any_unis = {
+            uni
+            for uni, endpoint in zip(["uni_a", "uni_z"], content["endpoints"])
+            if endpoint.get("vlan") == "any"
+        }
+        vlan_exclude = {}
 
-        try:
-            response = requests.post(KYTOS_EVC_URL, json=evc_dict, timeout=30)
-            assert response.status_code == 201, response.text
-            circuit_id = response.json()["circuit_id"]
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            err = traceback.format_exc().replace("\n", ", ")
-            log.warning(f"EVC creation failed: {exc} - {err}")
-            return JSONResponse(
-                {"description": "L2VPN creation failed: check logs"}, 400
-            )
+        for attempt in range(MAX_VLAN_RETRIES):
+            evc_dict, code, msg = self.parse_evc(content, vlan_exclude=vlan_exclude)
+            if not evc_dict:
+                log.warning(f"EVC creation failed: {msg}. request={content}")
+                return JSONResponse({"description": msg}, code)
 
-        return JSONResponse({"service_id": circuit_id}, 201)
+            response = None
+            try:
+                response = requests.post(KYTOS_EVC_URL, json=evc_dict, timeout=30)
+                assert response.status_code == 201, response.text
+                circuit_id = response.json()["circuit_id"]
+                return JSONResponse({"service_id": circuit_id}, 201)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                # retry with a different VLAN when a vlan="any" endpoint lost a
+                # race and mef_eline reports the chosen tag as unavailable
+                if (
+                    any_unis
+                    and attempt < MAX_VLAN_RETRIES - 1
+                    and self._is_tag_conflict(response)
+                ):
+                    for uni in any_unis:
+                        # value comes from choose_available_vlan (always int);
+                        # cast defensively so excludes are never strings
+                        vlan_exclude.setdefault(uni, set()).add(
+                            int(evc_dict[uni]["tag"]["value"])
+                        )
+                    log.info(
+                        f"vlan='any' conflict on attempt {attempt + 1}, retrying "
+                        f"excluding {vlan_exclude}. request={content}"
+                    )
+                    continue
+                err = traceback.format_exc().replace("\n", ", ")
+                log.warning(f"EVC creation failed: {exc} - {err}")
+                return JSONResponse(
+                    {"description": "L2VPN creation failed: check logs"}, 400
+                )
+        # all retries exhausted on tag conflict
+        return JSONResponse(
+            {"description": "L2VPN creation failed: no VLAN available for 'any'"},
+            400,
+        )
 
     @rest("l2vpn/1.0", methods=["GET"])
     def get_all_l2vpns(self, _request: Request) -> JSONResponse:
@@ -550,8 +586,15 @@ class Main(KytosNApp):  # pylint: disable=R0904
         return sdx_l2vpn
 
     # pylint: disable=too-many-return-statements, too-many-branches
-    def parse_evc(self, content):
-        """Parse content request into EVC dict."""
+    # pylint: disable=too-many-statements, too-many-locals
+    def parse_evc(self, content, vlan_exclude=None):
+        """Parse content request into EVC dict.
+
+        vlan_exclude, when provided, is a dict mapping the uni key
+        ("uni_a"/"uni_z") to a set of VLANs that must not be chosen when the
+        endpoint requests vlan="any" (used by the TOCTOU retry).
+        """
+        vlan_exclude = vlan_exclude or {}
         if "state" in content:
             return None, 422, "Attribute 'state' not supported for L2VPN creation"
         sched_start = content.get("scheduling", {}).get("start_time", MIN_TIME)
@@ -614,13 +657,24 @@ class Main(KytosNApp):  # pylint: disable=R0904
             evc_dict["secondary_constraints"][metrict_type]["delay"] = min_bw["value"]
 
         for uni, endpoint in zip(["uni_a", "uni_z"], content.get("endpoints", [])):
-            sdx_id = endpoint["port_id"]
+            sdx_id = endpoint.get("port_id")
             kytos_id = self.sdx2kytos.get(sdx_id)
             if not sdx_id or not kytos_id:
                 return None, 400, f"Invalid endpoint.port_id ({sdx_id})"
+            vlan = endpoint.get("vlan")
+            if vlan is None:
+                return None, 400, f"Missing endpoint.vlan for port_id ({sdx_id})"
             evc_dict.setdefault(uni, {})
             evc_dict[uni]["interface_id"] = kytos_id
-            sdx_vlan, msg = self.parse_vlan(endpoint["vlan"])
+            if vlan == "any":
+                sdx_vlan, msg = self.choose_available_vlan(
+                    kytos_id, sdx_id, exclude=vlan_exclude.get(uni, ())
+                )
+                if sdx_vlan is None:
+                    return None, 400, msg
+                evc_dict[uni]["tag"] = {"tag_type": "vlan", "value": sdx_vlan}
+                continue
+            sdx_vlan, msg = self.parse_vlan(vlan)
             if sdx_vlan is None:
                 return None, 400, msg
             if sdx_vlan:
@@ -638,7 +692,9 @@ class Main(KytosNApp):  # pylint: disable=R0904
         # sdx_vlan: some conversion from sdx -> kytos must be done for VLAN
         # "xx" -> xx: VLAN ID integer
         # "all" -> <no-tag>: on Kytos that would be a EPL (no tag)
-        # "any" -> Not Supported! the OXPO wont choose the VLAN, not supported
+        # "any" -> resolved by the caller (choose_available_vlan) using the
+        #     endpoint's port context; if "any" reaches here it means that port
+        #     context was missing, so it is rejected as a safety net.
         # "untagged" -> untagged: no conversion
         # "xx:yy" -> [xx, yy]: VLAN range
         if isinstance(sdx_vlan, int) or sdx_vlan.isdigit():
@@ -664,6 +720,83 @@ class Main(KytosNApp):  # pylint: disable=R0904
             sdx_vlan = [sdx_vlan]
         return sdx_vlan, None
 
+    def _get_port_vlan_range(self, port_id):
+        """Get the advertised l2vpn-ptp vlan_range for a given SDX port_id.
+
+        The vlan_range is looked up from the converted topology
+        (_converted_topo), where it is published per port under
+        services["l2vpn-ptp"]["vlan_range"]. Returns a list of ranges
+        (e.g. [[1, 4094]] or [[1, 10], [20, 30]]), or None when the port or
+        the l2vpn-ptp service is not present. A flat [start, end] is
+        normalized to [[start, end]].
+        """
+        with self._topo_lock:
+            nodes = (self._converted_topo or {}).get("nodes", [])
+            for node in nodes:
+                for port in node.get("ports", []):
+                    if port.get("id") != port_id:
+                        continue
+                    vlan_range = (
+                        port.get("services", {}).get("l2vpn-ptp", {}).get("vlan_range")
+                    )
+                    if vlan_range and isinstance(vlan_range[0], int):
+                        vlan_range = [vlan_range]
+                    return vlan_range
+        return None
+
+    def choose_available_vlan(self, kytos_id, port_id, exclude=()):
+        """Choose an available VLAN for a vlan="any" endpoint.
+
+        Candidates are drawn from the port's advertised vlan_range and
+        validated against live availability using the Kytos core Interface
+        is_tag_available(). The lowest VLAN that is both in range and
+        available (and not in exclude) is returned. mef_eline performs the
+        actual tag reservation when it creates the EVC.
+
+        Returns (vlan_int, None) on success or (None, error_msg) on failure.
+        """
+        vlan_range = self._get_port_vlan_range(port_id)
+        if not vlan_range:
+            return None, f"No l2vpn-ptp vlan_range available for port {port_id}"
+        iface = self.controller.get_interface_by_id(kytos_id)
+        if iface is None:
+            return None, f"Interface not found for {port_id}"
+        for start, end in vlan_range:
+            for vlan in range(start, end + 1):
+                if vlan in exclude:
+                    continue
+                if iface.is_tag_available(vlan):
+                    log.info(f"Chose VLAN {vlan} for vlan='any' on port {port_id}")
+                    return vlan, None
+        return None, f"No VLAN available for 'any' on port {port_id}"
+
+    @staticmethod
+    def _is_tag_conflict(response) -> bool:
+        """Whether a mef_eline response indicates the VLAN tag was unavailable.
+
+        Used to decide whether to retry a vlan="any" resolution with the
+        conflicting VLAN excluded. mef_eline reports it as a JSON body e.g.:
+        {"description": "KytosTagsAreNotAvailable, The tags 101 are not
+        available in <intf>", "code": 400}. We inspect the parsed "description"
+        field, falling back to a raw substring check when the body is not JSON.
+        """
+        if response is None:
+            return False
+        try:
+            body = response.json()
+        except Exception:  # pylint: disable=broad-exception-caught
+            body = None
+        if isinstance(body, dict):
+            description = str(body.get("description", "")).lower()
+        else:
+            try:
+                description = response.text.lower()
+            except Exception:  # pylint: disable=broad-exception-caught
+                return False
+        return (
+            "kytostagsarenotavailable" in description or "not available" in description
+        )
+
     @rest("l2vpn/1.0/{service_id}", methods=["DELETE"])
     def delete_l2vpn(self, request: Request) -> JSONResponse:
         """REST to delete L2VPN."""
@@ -688,11 +821,16 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
         return JSONResponse("L2VPN Deleted", 201)
 
-    @rest("v1/l2vpn_ptp", methods=["POST"])
-    def create_l2vpn_ptp(self, request: Request) -> JSONResponse:
-        """REST to create L2VPN ptp connection."""
-        content = get_json_or_400(request, self.controller.loop)
+    # pylint: disable=too-many-branches
+    def _build_ptp_evc(self, content, vlan_exclude=None):
+        """Build the EVC dict for create_l2vpn_ptp.
 
+        Resolves vlan="any" endpoints via choose_available_vlan (excluding
+        VLANs in vlan_exclude[uni]). Returns (evc_dict, None) on success or
+        (None, JSONResponse) when a deterministic validation error should be
+        returned to the caller. Invalid VLANs raise HTTPException, as before.
+        """
+        vlan_exclude = vlan_exclude or {}
         evc_dict = {
             "name": None,
             "uni_a": {},
@@ -704,40 +842,96 @@ class Main(KytosNApp):  # pylint: disable=R0904
             if attr not in content:
                 msg = f"missing attribute {attr}"
                 log.warning(f"EVC creation failed: {msg}. request={content}")
-                return JSONResponse({"result": msg}, 400)
+                return None, JSONResponse({"result": msg}, 400)
             if "uni_" in attr:
                 sdx_id = content[attr].get("port_id")
                 kytos_id = self.sdx2kytos.get(sdx_id)
                 if not sdx_id or not kytos_id:
                     msg = f"unknown value for {attr}.port_id ({sdx_id})"
                     log.warning(f"EVC creation failed: {msg}. request={content}")
-                    return JSONResponse({"result": msg}, 400)
+                    return None, JSONResponse({"result": msg}, 400)
                 evc_dict[attr]["interface_id"] = kytos_id
                 if "tag" in content[attr]:
-                    sdx_vlan, msg = self.parse_vlan(content[attr]["tag"]["value"])
-                    if sdx_vlan is None:
-                        msg_err = f"Invalid VLAN for L2VPN creation: {msg}"
-                        log.warning(f"{msg_err} -- request={content}")
-                        raise HTTPException(400, detail=msg_err)
-                    if sdx_vlan:
+                    if content[attr]["tag"]["value"] == "any":
+                        sdx_vlan, msg = self.choose_available_vlan(
+                            kytos_id, sdx_id, exclude=vlan_exclude.get(attr, ())
+                        )
+                        if sdx_vlan is None:
+                            msg_err = f"Invalid VLAN for L2VPN creation: {msg}"
+                            log.warning(f"{msg_err} -- request={content}")
+                            raise HTTPException(400, detail=msg_err)
                         evc_dict[attr]["tag"] = {
                             "tag_type": "vlan",
                             "value": sdx_vlan,
                         }
+                    else:
+                        sdx_vlan, msg = self.parse_vlan(content[attr]["tag"]["value"])
+                        if sdx_vlan is None:
+                            msg_err = f"Invalid VLAN for L2VPN creation: {msg}"
+                            log.warning(f"{msg_err} -- request={content}")
+                            raise HTTPException(400, detail=msg_err)
+                        if sdx_vlan:
+                            evc_dict[attr]["tag"] = {
+                                "tag_type": "vlan",
+                                "value": sdx_vlan,
+                            }
             elif attr == "name":
                 evc_dict[attr] = self.name_prefix + content[attr]
             else:
                 evc_dict[attr] = content[attr]
 
-        try:
-            response = requests.post(KYTOS_EVC_URL, json=evc_dict, timeout=30)
-            assert response.status_code == 201, response.text
-        except Exception as exc:
-            err = traceback.format_exc().replace("\n", ", ")
-            log.warning(f"EVC creation failed: {exc} - {err}")
-            raise HTTPException(400, detail=f"Request to Kytos failed: {exc}") from exc
+        return evc_dict, None
 
-        return JSONResponse(response.json(), 200)
+    @rest("v1/l2vpn_ptp", methods=["POST"])
+    def create_l2vpn_ptp(self, request: Request) -> JSONResponse:
+        """REST to create L2VPN ptp connection."""
+        content = get_json_or_400(request, self.controller.loop)
+
+        # endpoints requesting vlan="any" that may need a retry with a
+        # different VLAN if mef_eline rejects the chosen one (TOCTOU)
+        any_unis = {
+            attr
+            for attr in ("uni_a", "uni_z")
+            if content.get(attr, {}).get("tag", {}).get("value") == "any"
+        }
+        vlan_exclude = {}
+
+        for attempt in range(MAX_VLAN_RETRIES):
+            evc_dict, err = self._build_ptp_evc(content, vlan_exclude=vlan_exclude)
+            if err is not None:
+                return err
+
+            response = None
+            try:
+                response = requests.post(KYTOS_EVC_URL, json=evc_dict, timeout=30)
+                assert response.status_code == 201, response.text
+                return JSONResponse(response.json(), 200)
+            except Exception as exc:
+                if (
+                    any_unis
+                    and attempt < MAX_VLAN_RETRIES - 1
+                    and self._is_tag_conflict(response)
+                ):
+                    for uni in any_unis:
+                        # value comes from choose_available_vlan (always int);
+                        # cast defensively so excludes are never strings
+                        vlan_exclude.setdefault(uni, set()).add(
+                            int(evc_dict[uni]["tag"]["value"])
+                        )
+                    log.info(
+                        f"vlan='any' conflict on attempt {attempt + 1}, retrying "
+                        f"excluding {vlan_exclude}. request={content}"
+                    )
+                    continue
+                err = traceback.format_exc().replace("\n", ", ")
+                log.warning(f"EVC creation failed: {exc} - {err}")
+                raise HTTPException(
+                    400, detail=f"Request to Kytos failed: {exc}"
+                ) from exc
+        # all retries exhausted on tag conflict
+        raise HTTPException(
+            400, detail="Request to Kytos failed: no VLAN available for 'any'"
+        )
 
     # pylint: disable=too-many-locals
     @rest("v1/l2vpn_ptp", methods=["DELETE"])
