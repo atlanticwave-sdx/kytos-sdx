@@ -19,7 +19,7 @@ from napps.kytos.sdx.tests.helpers import (
 )
 
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access, too-many-public-methods
 class TestMain:
     """Tests for the Main class."""
 
@@ -723,6 +723,53 @@ class TestMain:
         assert vlan is None
         assert "Interface not found" in msg
 
+    def test_is_tag_conflict(self):
+        """Test _is_tag_conflict() JSON parsing and substring fallback."""
+        # JSON body with the exception in "description" -> conflict
+        resp = MagicMock()
+        resp.json.return_value = {
+            "description": "KytosTagsAreNotAvailable, The tags 10 are not "
+            "available in aa:00:00:00:00:00:00:03:50",
+            "code": 400,
+        }
+        assert self.napp._is_tag_conflict(resp) is True
+
+        # JSON body with an unrelated description -> not a conflict
+        resp = MagicMock()
+        resp.json.return_value = {"description": "Some other error", "code": 400}
+        assert self.napp._is_tag_conflict(resp) is False
+
+        # non-JSON body: falls back to raw text substring check
+        resp = MagicMock()
+        resp.json.side_effect = ValueError("no json")
+        resp.text = "KytosTagsAreNotAvailable, tags not available"
+        assert self.napp._is_tag_conflict(resp) is True
+
+        resp = MagicMock()
+        resp.json.side_effect = ValueError("no json")
+        resp.text = "internal server error"
+        assert self.napp._is_tag_conflict(resp) is False
+
+        # no response
+        assert self.napp._is_tag_conflict(None) is False
+
+    async def test_parse_evc_missing_vlan(self):
+        """Test parse_evc returns a clean 400 when an endpoint lacks vlan."""
+        self.napp.sdx2kytos = {
+            "urn:sdx:port:testoxp.net:TestSw3:50": "aa:00:00:00:00:00:00:03:50",
+            "urn:sdx:port:testoxp.net:TestSw1:40": "aa:00:00:00:00:00:00:01:40",
+        }
+        content = {
+            "endpoints": [
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw3:50"},
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw1:40", "vlan": "501"},
+            ]
+        }
+        evc_dict, code, msg = self.napp.parse_evc(content)
+        assert evc_dict is None
+        assert code == 400
+        assert "Missing endpoint.vlan" in msg
+
     @patch("requests.post")
     async def test_create_l2vpn_any_retry(self, requests_mock):
         """Test vlan='any' retries with a new VLAN on mef_eline tag conflict."""
@@ -751,13 +798,14 @@ class TestMain:
             ]
         }
         # first POST: mef_eline rejects the tag; second POST: success
-        conflict = MagicMock(
-            status_code=400,
-            text=(
-                '{"description":"KytosTagsAreNotAvailable, The tags 10 are not '
-                'available in aa:00:00:00:00:00:00:03:50","code":400}'
+        conflict = MagicMock(status_code=400)
+        conflict.json.return_value = {
+            "description": (
+                "KytosTagsAreNotAvailable, The tags 10 are not available "
+                "in aa:00:00:00:00:00:00:03:50"
             ),
-        )
+            "code": 400,
+        }
         ok = MagicMock(status_code=201)
         ok.json.return_value = {"circuit_id": "z9"}
         requests_mock.side_effect = [conflict, ok]

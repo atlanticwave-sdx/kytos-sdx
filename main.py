@@ -2,6 +2,8 @@
 Main module of amlight/sdx Kytos Network Application.
 """
 
+# pylint: disable=too-many-lines
+
 import os
 import threading
 import time
@@ -464,8 +466,10 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     and self._is_tag_conflict(response)
                 ):
                     for uni in any_unis:
+                        # value comes from choose_available_vlan (always int);
+                        # cast defensively so excludes are never strings
                         vlan_exclude.setdefault(uni, set()).add(
-                            evc_dict[uni]["tag"]["value"]
+                            int(evc_dict[uni]["tag"]["value"])
                         )
                     log.info(
                         f"vlan='any' conflict on attempt {attempt + 1}, retrying "
@@ -585,7 +589,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
         return sdx_l2vpn
 
     # pylint: disable=too-many-return-statements, too-many-branches
-    # pylint: disable=too-many-statements
+    # pylint: disable=too-many-statements, too-many-locals
     def parse_evc(self, content, vlan_exclude=None):
         """Parse content request into EVC dict.
 
@@ -656,13 +660,16 @@ class Main(KytosNApp):  # pylint: disable=R0904
             evc_dict["secondary_constraints"][metrict_type]["delay"] = min_bw["value"]
 
         for uni, endpoint in zip(["uni_a", "uni_z"], content.get("endpoints", [])):
-            sdx_id = endpoint["port_id"]
+            sdx_id = endpoint.get("port_id")
             kytos_id = self.sdx2kytos.get(sdx_id)
             if not sdx_id or not kytos_id:
                 return None, 400, f"Invalid endpoint.port_id ({sdx_id})"
+            vlan = endpoint.get("vlan")
+            if vlan is None:
+                return None, 400, f"Missing endpoint.vlan for port_id ({sdx_id})"
             evc_dict.setdefault(uni, {})
             evc_dict[uni]["interface_id"] = kytos_id
-            if endpoint["vlan"] == "any":
+            if vlan == "any":
                 sdx_vlan, msg = self.choose_available_vlan(
                     kytos_id, sdx_id, exclude=vlan_exclude.get(uni, ())
                 )
@@ -670,7 +677,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     return None, 400, msg
                 evc_dict[uni]["tag"] = {"tag_type": "vlan", "value": sdx_vlan}
                 continue
-            sdx_vlan, msg = self.parse_vlan(endpoint["vlan"])
+            sdx_vlan, msg = self.parse_vlan(vlan)
             if sdx_vlan is None:
                 return None, 400, msg
             if sdx_vlan:
@@ -762,6 +769,7 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 if vlan in exclude:
                     continue
                 if iface.is_tag_available(vlan):
+                    log.info(f"Chose VLAN {vlan} for vlan='any' on port {port_id}")
                     return vlan, None
         return None, f"No VLAN available for 'any' on port {port_id}"
 
@@ -770,16 +778,27 @@ class Main(KytosNApp):  # pylint: disable=R0904
         """Whether a mef_eline response indicates the VLAN tag was unavailable.
 
         Used to decide whether to retry a vlan="any" resolution with the
-        conflicting VLAN excluded. mef_eline reports it as e.g.:
-        "KytosTagsAreNotAvailable, The tags 101 are not available in <intf>".
+        conflicting VLAN excluded. mef_eline reports it as a JSON body e.g.:
+        {"description": "KytosTagsAreNotAvailable, The tags 101 are not
+        available in <intf>", "code": 400}. We inspect the parsed "description"
+        field, falling back to a raw substring check when the body is not JSON.
         """
         if response is None:
             return False
         try:
-            text = response.text.lower()
+            body = response.json()
         except Exception:  # pylint: disable=broad-exception-caught
-            return False
-        return "kytostagsarenotavailable" in text or "not available" in text
+            body = None
+        if isinstance(body, dict):
+            description = str(body.get("description", "")).lower()
+        else:
+            try:
+                description = response.text.lower()
+            except Exception:  # pylint: disable=broad-exception-caught
+                return False
+        return (
+            "kytostagsarenotavailable" in description or "not available" in description
+        )
 
     @rest("l2vpn/1.0/{service_id}", methods=["DELETE"])
     def delete_l2vpn(self, request: Request) -> JSONResponse:
@@ -897,8 +916,10 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     and self._is_tag_conflict(response)
                 ):
                     for uni in any_unis:
+                        # value comes from choose_available_vlan (always int);
+                        # cast defensively so excludes are never strings
                         vlan_exclude.setdefault(uni, set()).add(
-                            evc_dict[uni]["tag"]["value"]
+                            int(evc_dict[uni]["tag"]["value"])
                         )
                     log.info(
                         f"vlan='any' conflict on attempt {attempt + 1}, retrying "

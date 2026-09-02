@@ -128,8 +128,9 @@ The conflict is detected from the mef_eline 400 body, which looks like:
 {"description":"KytosTagsAreNotAvailable, The tags 101 are not available in aa:00:00:00:00:00:00:01:50","code":400}
 ```
 
-`_is_tag_conflict()` keys on the `KytosTagsAreNotAvailable` exception name (with
-`not available` as a fallback).
+`_is_tag_conflict()` parses the body as JSON and inspects the `description`
+field for the `KytosTagsAreNotAvailable` exception name (or `not available`),
+falling back to a raw-text substring check when the body is not JSON.
 
 ## Tests (`tests/unit/test_main.py`)
 
