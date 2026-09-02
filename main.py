@@ -5,6 +5,7 @@ Main module of amlight/sdx Kytos Network Application.
 # pylint: disable=too-many-lines
 
 import os
+import random
 import threading
 import time
 import traceback
@@ -443,7 +444,11 @@ class Main(KytosNApp):  # pylint: disable=R0904
         vlan_exclude = {}
 
         for attempt in range(MAX_VLAN_RETRIES):
-            evc_dict, code, msg = self.parse_evc(content, vlan_exclude=vlan_exclude)
+            # randomize "any" selection on retry to avoid a thundering herd of
+            # concurrent requests re-converging on the same lowest free VLAN
+            evc_dict, code, msg = self.parse_evc(
+                content, vlan_exclude=vlan_exclude, randomize=(attempt > 0)
+            )
             if not evc_dict:
                 log.warning(f"EVC creation failed: {msg}. request={content}")
                 return JSONResponse({"description": msg}, code)
@@ -587,12 +592,13 @@ class Main(KytosNApp):  # pylint: disable=R0904
 
     # pylint: disable=too-many-return-statements, too-many-branches
     # pylint: disable=too-many-statements, too-many-locals
-    def parse_evc(self, content, vlan_exclude=None):
+    def parse_evc(self, content, vlan_exclude=None, randomize=False):
         """Parse content request into EVC dict.
 
         vlan_exclude, when provided, is a dict mapping the uni key
         ("uni_a"/"uni_z") to a set of VLANs that must not be chosen when the
-        endpoint requests vlan="any" (used by the TOCTOU retry).
+        endpoint requests vlan="any" (used by the TOCTOU retry). randomize is
+        forwarded to choose_available_vlan to spread "any" picks on retry.
         """
         vlan_exclude = vlan_exclude or {}
         if "state" in content:
@@ -668,7 +674,10 @@ class Main(KytosNApp):  # pylint: disable=R0904
             evc_dict[uni]["interface_id"] = kytos_id
             if vlan == "any":
                 sdx_vlan, msg = self.choose_available_vlan(
-                    kytos_id, sdx_id, exclude=vlan_exclude.get(uni, ())
+                    kytos_id,
+                    sdx_id,
+                    exclude=vlan_exclude.get(uni, ()),
+                    randomize=randomize,
                 )
                 if sdx_vlan is None:
                     return None, 400, msg
@@ -744,14 +753,21 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     return vlan_range
         return None
 
-    def choose_available_vlan(self, kytos_id, port_id, exclude=()):
+    def choose_available_vlan(self, kytos_id, port_id, exclude=(), randomize=False):
         """Choose an available VLAN for a vlan="any" endpoint.
 
         Candidates are drawn from the port's advertised vlan_range and
         validated against live availability using the Kytos core Interface
-        is_tag_available(). The lowest VLAN that is both in range and
-        available (and not in exclude) is returned. mef_eline performs the
-        actual tag reservation when it creates the EVC.
+        is_tag_available(). The first VLAN that is both in range and available
+        (and not in exclude) is returned. mef_eline performs the actual tag
+        reservation when it creates the EVC.
+
+        By default candidates are scanned lowest-first (deterministic). When
+        randomize is True the candidate order is shuffled: concurrent "any"
+        requests then spread across the VLAN space instead of all converging on
+        the lowest free VLAN, which avoids a thundering-herd of mef_eline tag
+        conflicts. It is used on retry (see the create_l2vpn* loops), so the
+        happy path stays deterministic and only contention pays for the spread.
 
         Returns (vlan_int, None) on success or (None, error_msg) on failure.
         """
@@ -761,13 +777,18 @@ class Main(KytosNApp):  # pylint: disable=R0904
         iface = self.controller.get_interface_by_id(kytos_id)
         if iface is None:
             return None, f"Interface not found for {port_id}"
-        for start, end in vlan_range:
-            for vlan in range(start, end + 1):
-                if vlan in exclude:
-                    continue
-                if iface.is_tag_available(vlan):
-                    log.info(f"Chose VLAN {vlan} for vlan='any' on port {port_id}")
-                    return vlan, None
+        candidates = [
+            vlan
+            for start, end in vlan_range
+            for vlan in range(start, end + 1)
+            if vlan not in exclude
+        ]
+        if randomize:
+            random.shuffle(candidates)
+        for vlan in candidates:
+            if iface.is_tag_available(vlan):
+                log.info(f"Chose VLAN {vlan} for vlan='any' on port {port_id}")
+                return vlan, None
         return None, f"No VLAN available for 'any' on port {port_id}"
 
     @staticmethod
@@ -822,11 +843,12 @@ class Main(KytosNApp):  # pylint: disable=R0904
         return JSONResponse("L2VPN Deleted", 201)
 
     # pylint: disable=too-many-branches
-    def _build_ptp_evc(self, content, vlan_exclude=None):
+    def _build_ptp_evc(self, content, vlan_exclude=None, randomize=False):
         """Build the EVC dict for create_l2vpn_ptp.
 
         Resolves vlan="any" endpoints via choose_available_vlan (excluding
-        VLANs in vlan_exclude[uni]). Returns (evc_dict, None) on success or
+        VLANs in vlan_exclude[uni], and shuffling the pick when randomize is
+        True on retry). Returns (evc_dict, None) on success or
         (None, JSONResponse) when a deterministic validation error should be
         returned to the caller. Invalid VLANs raise HTTPException, as before.
         """
@@ -854,7 +876,10 @@ class Main(KytosNApp):  # pylint: disable=R0904
                 if "tag" in content[attr]:
                     if content[attr]["tag"]["value"] == "any":
                         sdx_vlan, msg = self.choose_available_vlan(
-                            kytos_id, sdx_id, exclude=vlan_exclude.get(attr, ())
+                            kytos_id,
+                            sdx_id,
+                            exclude=vlan_exclude.get(attr, ()),
+                            randomize=randomize,
                         )
                         if sdx_vlan is None:
                             msg_err = f"Invalid VLAN for L2VPN creation: {msg}"
@@ -897,7 +922,11 @@ class Main(KytosNApp):  # pylint: disable=R0904
         vlan_exclude = {}
 
         for attempt in range(MAX_VLAN_RETRIES):
-            evc_dict, err = self._build_ptp_evc(content, vlan_exclude=vlan_exclude)
+            # randomize "any" selection on retry to avoid a thundering herd of
+            # concurrent requests re-converging on the same lowest free VLAN
+            evc_dict, err = self._build_ptp_evc(
+                content, vlan_exclude=vlan_exclude, randomize=(attempt > 0)
+            )
             if err is not None:
                 return err
 

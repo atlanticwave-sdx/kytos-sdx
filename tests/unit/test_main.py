@@ -770,9 +770,41 @@ class TestMain:
         assert code == 400
         assert "Missing endpoint.vlan" in msg
 
+    @patch("napps.kytos.sdx.main.random.shuffle")
+    def test_choose_available_vlan_randomize(self, shuffle_mock):
+        """Test choose_available_vlan(randomize=True) shuffles candidates."""
+        pid = "urn:sdx:port:testoxp.net:TestSw1:40"
+        kid = "aa:00:00:00:00:00:00:01:40"
+        iface = MagicMock()
+        iface.is_tag_available.return_value = True
+        self.napp.controller.get_interface_by_id = MagicMock(return_value=iface)
+        self.napp._converted_topo = self._converted_topo(pid, [[10, 20]])
+
+        # deterministic (randomize=False): lowest-first, shuffle not used
+        vlan, msg = self.napp.choose_available_vlan(kid, pid)
+        assert (vlan, msg) == (10, None)
+        shuffle_mock.assert_not_called()
+
+        # randomize=True: shuffle is applied to the candidate list. Patch it to
+        # reverse so the outcome is deterministic -> picks the highest (20)
+        shuffle_mock.side_effect = lambda seq: seq.reverse()
+        vlan, msg = self.napp.choose_available_vlan(kid, pid, randomize=True)
+        assert (vlan, msg) == (20, None)
+        shuffle_mock.assert_called_once()
+        # exclude still honored under randomize (20 excluded -> next is 19)
+        vlan, msg = self.napp.choose_available_vlan(
+            kid, pid, exclude={20}, randomize=True
+        )
+        assert (vlan, msg) == (19, None)
+
     @patch("requests.post")
-    async def test_create_l2vpn_any_retry(self, requests_mock):
-        """Test vlan='any' retries with a new VLAN on mef_eline tag conflict."""
+    @patch("napps.kytos.sdx.main.random.shuffle", side_effect=lambda seq: seq.reverse())
+    async def test_create_l2vpn_any_retry(self, shuffle_mock, requests_mock):
+        """Test vlan='any' retries with a new VLAN on mef_eline tag conflict.
+
+        On retry the selection is randomized; random.shuffle is patched to
+        reverse the candidate list so the outcome stays deterministic.
+        """
         self.napp.controller.loop = asyncio.get_running_loop()
         self.napp.sdx2kytos = {
             "urn:sdx:port:testoxp.net:TestSw3:50": "aa:00:00:00:00:00:00:03:50",
@@ -822,11 +854,17 @@ class TestMain:
         )
         assert response.status_code == 201
         assert response.json() == {"service_id": "z9"}
-        # retried once (2 POSTs); second attempt excluded VLAN 10 -> chose 11
+        # retried once (2 POSTs); first attempt (deterministic) chose 10 for both
         assert requests_mock.call_count == 2
+        first = requests_mock.call_args_list[0].kwargs["json"]
+        assert first["uni_a"]["tag"]["value"] == 10
+        assert first["uni_z"]["tag"]["value"] == 10
+        # second attempt randomizes (shuffle reversed [11..20]) and excludes 10,
+        # so it picks 20 -> proves the retry uses the randomized path
+        shuffle_mock.assert_called()
         second = requests_mock.call_args_list[1].kwargs["json"]
-        assert second["uni_a"]["tag"]["value"] == 11
-        assert second["uni_z"]["tag"]["value"] == 11
+        assert second["uni_a"]["tag"]["value"] == 20
+        assert second["uni_z"]["tag"]["value"] == 20
 
     @patch("requests.post")
     async def test_create_l2vpn_ptp_any(self, requests_mock):
