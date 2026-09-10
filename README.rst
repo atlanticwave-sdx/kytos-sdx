@@ -147,6 +147,9 @@ Create L2VPN with new API
 	# Example 05: minimal attributes with endpoint.0 being untagged (frames without 802.1q header)
 	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_untagged_503", "endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "untagged"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "503"}]}'
 
+	# Example 06: vlan "any" - the SDX Controller chooses an available VLAN from the port's vlan_range (each endpoint resolved independently)
+	curl -s -X POST -H 'Content-type: application/json' http://127.0.0.1:8181/api/kytos/sdx/l2vpn/1.0 -d '{"name": "AMPATH_vlan_any_any", "endpoints": [{"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "any"}, {"port_id": "urn:sdx:port:ampath.net:Ampath1:40", "vlan": "any"}]}'
+
 
 Edit L2VPN with new API
 *************************

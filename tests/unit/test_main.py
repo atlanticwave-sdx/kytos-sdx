@@ -19,7 +19,7 @@ from napps.kytos.sdx.tests.helpers import (
 )
 
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access, too-many-public-methods
 class TestMain:
     """Tests for the Main class."""
 
@@ -272,16 +272,48 @@ class TestMain:
         )
         assert response.status_code == 400
 
-        # Test 5: unsupported vlan "any" must return 400, not crash (issue #102)
+        # Test 5: vlan "any" resolves to a concrete available VLAN and succeeds
         requests_mock.return_value.status_code = 201
+        iface = MagicMock()
+        iface.is_tag_available.return_value = True
+        self.napp.controller.get_interface_by_id = MagicMock(return_value=iface)
+        self.napp._converted_topo = {
+            "nodes": [
+                {
+                    "ports": [
+                        {
+                            "id": "urn:sdx:port:testoxp.net:TestSw3:50",
+                            "services": {"l2vpn-ptp": {"vlan_range": [[100, 200]]}},
+                        },
+                        {
+                            "id": "urn:sdx:port:testoxp.net:TestSw1:40",
+                            "services": {"l2vpn-ptp": {"vlan_range": [[100, 200]]}},
+                        },
+                    ]
+                }
+            ]
+        }
         payload["endpoints"][0]["vlan"] = "any"
         payload["endpoints"][1]["vlan"] = "any"
         response = await self.api_client.post(
             f"{self.endpoint}/l2vpn/1.0",
             json=payload,
         )
+        assert response.status_code == 201
+        assert response.json() == {"service_id": "a123"}
+        # both endpoints got the lowest available VLAN (100) as concrete ints
+        posted = requests_mock.call_args.kwargs["json"]
+        assert posted["uni_a"]["tag"] == {"tag_type": "vlan", "value": 100}
+        assert posted["uni_z"]["tag"] == {"tag_type": "vlan", "value": 100}
+
+        # Test 6: vlan "any" with no vlan_range available returns 400
+        self.napp._converted_topo = {"nodes": []}
+        response = await self.api_client.post(
+            f"{self.endpoint}/l2vpn/1.0",
+            json=payload,
+        )
         assert response.status_code == 400
-        assert "any" in response.json()["description"]
+        assert "vlan_range" in response.json()["description"]
 
     def test_handler_on_topology_loaded(self):
         """Test handler_on_topology_loaded."""
@@ -599,6 +631,248 @@ class TestMain:
         vlan, msg = self.napp.parse_vlan("100.1:200.2")
         assert vlan is None
         assert "Invalid vlan range" in msg
+        # case 12: "any" is not resolved here (needs port context); rejected
+        vlan, msg = self.napp.parse_vlan("any")
+        assert vlan is None
+        assert "any" in msg
+
+    @staticmethod
+    def _converted_topo(port_id, vlan_range):
+        """Build a minimal _converted_topo carrying one port's vlan_range."""
+        port = {"id": port_id}
+        if vlan_range is not None:
+            port["services"] = {"l2vpn-ptp": {"vlan_range": vlan_range}}
+        else:
+            port["services"] = {}
+        return {"nodes": [{"ports": [port]}]}
+
+    def test_get_port_vlan_range(self):
+        """Test _get_port_vlan_range()."""
+        pid = "urn:sdx:port:testoxp.net:TestSw1:40"
+        # found (list of ranges)
+        self.napp._converted_topo = self._converted_topo(pid, [[1, 10], [20, 30]])
+        assert self.napp._get_port_vlan_range(pid) == [[1, 10], [20, 30]]
+        # flat [start, end] is normalized to [[start, end]]
+        self.napp._converted_topo = self._converted_topo(pid, [1, 10])
+        assert self.napp._get_port_vlan_range(pid) == [[1, 10]]
+        # port not found
+        assert self.napp._get_port_vlan_range("urn:sdx:port:x:y:1") is None
+        # port present but no l2vpn-ptp service
+        self.napp._converted_topo = self._converted_topo(pid, None)
+        assert self.napp._get_port_vlan_range(pid) is None
+        # empty converted topology
+        self.napp._converted_topo = None
+        assert self.napp._get_port_vlan_range(pid) is None
+
+    def test_choose_available_vlan(self):
+        """Test choose_available_vlan()."""
+        pid = "urn:sdx:port:testoxp.net:TestSw1:40"
+        kid = "aa:00:00:00:00:00:00:01:40"
+
+        def set_iface(available):
+            iface = MagicMock()
+            iface.is_tag_available.side_effect = available
+            self.napp.controller.get_interface_by_id = MagicMock(return_value=iface)
+            return iface
+
+        # lowest available first
+        self.napp._converted_topo = self._converted_topo(pid, [[1, 10]])
+        set_iface(lambda v, *a, **k: True)
+        vlan, msg = self.napp.choose_available_vlan(kid, pid)
+        assert (vlan, msg) == (1, None)
+
+        # skips used tags (1, 2 unavailable -> 3)
+        set_iface(lambda v, *a, **k: v >= 3)
+        vlan, msg = self.napp.choose_available_vlan(kid, pid)
+        assert (vlan, msg) == (3, None)
+
+        # exclude honored (1 excluded, all available -> 2)
+        set_iface(lambda v, *a, **k: True)
+        vlan, msg = self.napp.choose_available_vlan(kid, pid, exclude={1})
+        assert (vlan, msg) == (2, None)
+
+        # empty range -> error, is_tag_available never called
+        self.napp._converted_topo = self._converted_topo(pid, [])
+        iface = set_iface(lambda v, *a, **k: True)
+        vlan, msg = self.napp.choose_available_vlan(kid, pid)
+        assert vlan is None
+        assert "vlan_range" in msg
+        iface.is_tag_available.assert_not_called()
+
+        # fragmented range: whole first fragment [1,10] used -> iterate to
+        # second fragment and pick 20
+        self.napp._converted_topo = self._converted_topo(pid, [[1, 10], [20, 30]])
+        iface = set_iface(lambda v, *a, **k: v >= 20)
+        vlan, msg = self.napp.choose_available_vlan(kid, pid)
+        assert (vlan, msg) == (20, None)
+        # probed all of 1..10 before hitting 20 (11 calls total)
+        assert iface.is_tag_available.call_count == 11
+        assert iface.is_tag_available.call_args.args[0] == 20
+
+        # none available in range
+        self.napp._converted_topo = self._converted_topo(pid, [[1, 3]])
+        set_iface(lambda v, *a, **k: False)
+        vlan, msg = self.napp.choose_available_vlan(kid, pid)
+        assert vlan is None
+        assert "No VLAN available" in msg
+
+        # interface not found
+        self.napp._converted_topo = self._converted_topo(pid, [[1, 10]])
+        self.napp.controller.get_interface_by_id = MagicMock(return_value=None)
+        vlan, msg = self.napp.choose_available_vlan(kid, pid)
+        assert vlan is None
+        assert "Interface not found" in msg
+
+    def test_is_tag_conflict(self):
+        """Test _is_tag_conflict() JSON parsing and substring fallback."""
+        # JSON body with the exception in "description" -> conflict
+        resp = MagicMock()
+        resp.json.return_value = {
+            "description": "KytosTagsAreNotAvailable, The tags 10 are not "
+            "available in aa:00:00:00:00:00:00:03:50",
+            "code": 400,
+        }
+        assert self.napp._is_tag_conflict(resp) is True
+
+        # JSON body with an unrelated description -> not a conflict
+        resp = MagicMock()
+        resp.json.return_value = {"description": "Some other error", "code": 400}
+        assert self.napp._is_tag_conflict(resp) is False
+
+        # non-JSON body: falls back to raw text substring check
+        resp = MagicMock()
+        resp.json.side_effect = ValueError("no json")
+        resp.text = "KytosTagsAreNotAvailable, tags not available"
+        assert self.napp._is_tag_conflict(resp) is True
+
+        resp = MagicMock()
+        resp.json.side_effect = ValueError("no json")
+        resp.text = "internal server error"
+        assert self.napp._is_tag_conflict(resp) is False
+
+        # no response
+        assert self.napp._is_tag_conflict(None) is False
+
+    async def test_parse_evc_missing_vlan(self):
+        """Test parse_evc returns a clean 400 when an endpoint lacks vlan."""
+        self.napp.sdx2kytos = {
+            "urn:sdx:port:testoxp.net:TestSw3:50": "aa:00:00:00:00:00:00:03:50",
+            "urn:sdx:port:testoxp.net:TestSw1:40": "aa:00:00:00:00:00:00:01:40",
+        }
+        content = {
+            "endpoints": [
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw3:50"},
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw1:40", "vlan": "501"},
+            ]
+        }
+        evc_dict, code, msg = self.napp.parse_evc(content)
+        assert evc_dict is None
+        assert code == 400
+        assert "Missing endpoint.vlan" in msg
+
+    @patch("requests.post")
+    async def test_create_l2vpn_any_retry(self, requests_mock):
+        """Test vlan='any' retries with a new VLAN on mef_eline tag conflict."""
+        self.napp.controller.loop = asyncio.get_running_loop()
+        self.napp.sdx2kytos = {
+            "urn:sdx:port:testoxp.net:TestSw3:50": "aa:00:00:00:00:00:00:03:50",
+            "urn:sdx:port:testoxp.net:TestSw1:40": "aa:00:00:00:00:00:00:01:40",
+        }
+        iface = MagicMock()
+        iface.is_tag_available.return_value = True
+        self.napp.controller.get_interface_by_id = MagicMock(return_value=iface)
+        self.napp._converted_topo = {
+            "nodes": [
+                {
+                    "ports": [
+                        {
+                            "id": "urn:sdx:port:testoxp.net:TestSw3:50",
+                            "services": {"l2vpn-ptp": {"vlan_range": [[10, 20]]}},
+                        },
+                        {
+                            "id": "urn:sdx:port:testoxp.net:TestSw1:40",
+                            "services": {"l2vpn-ptp": {"vlan_range": [[10, 20]]}},
+                        },
+                    ]
+                }
+            ]
+        }
+        # first POST: mef_eline rejects the tag; second POST: success
+        conflict = MagicMock(status_code=400)
+        conflict.json.return_value = {
+            "description": (
+                "KytosTagsAreNotAvailable, The tags 10 are not available "
+                "in aa:00:00:00:00:00:00:03:50"
+            ),
+            "code": 400,
+        }
+        ok = MagicMock(status_code=201)
+        ok.json.return_value = {"circuit_id": "z9"}
+        requests_mock.side_effect = [conflict, ok]
+
+        payload = {
+            "name": "any_retry",
+            "endpoints": [
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw3:50", "vlan": "any"},
+                {"port_id": "urn:sdx:port:testoxp.net:TestSw1:40", "vlan": "any"},
+            ],
+        }
+        response = await self.api_client.post(
+            f"{self.endpoint}/l2vpn/1.0", json=payload
+        )
+        assert response.status_code == 201
+        assert response.json() == {"service_id": "z9"}
+        # retried once (2 POSTs); second attempt excluded VLAN 10 -> chose 11
+        assert requests_mock.call_count == 2
+        second = requests_mock.call_args_list[1].kwargs["json"]
+        assert second["uni_a"]["tag"]["value"] == 11
+        assert second["uni_z"]["tag"]["value"] == 11
+
+    @patch("requests.post")
+    async def test_create_l2vpn_ptp_any(self, requests_mock):
+        """Test vlan='any' on the l2vpn_ptp endpoint."""
+        response_mock = MagicMock(status_code=201)
+        response_mock.json.return_value = {"circuit_id": "p1"}
+        requests_mock.return_value = response_mock
+        self.napp.controller.loop = asyncio.get_running_loop()
+        self.napp.sdx2kytos = {
+            "urn:sdx:port:testoxp.net:TestSw3:50": "aa:00:00:00:00:00:00:03:50",
+            "urn:sdx:port:testoxp.net:TestSw1:40": "aa:00:00:00:00:00:00:01:40",
+        }
+        iface = MagicMock()
+        iface.is_tag_available.return_value = True
+        self.napp.controller.get_interface_by_id = MagicMock(return_value=iface)
+        self.napp._converted_topo = {
+            "nodes": [
+                {
+                    "ports": [
+                        {
+                            "id": "urn:sdx:port:testoxp.net:TestSw3:50",
+                            "services": {"l2vpn-ptp": {"vlan_range": [[300, 400]]}},
+                        },
+                    ]
+                }
+            ]
+        }
+        payload = {
+            "name": "ptp_any",
+            "uni_a": {
+                "port_id": "urn:sdx:port:testoxp.net:TestSw3:50",
+                "tag": {"value": "any", "tag_type": 1},
+            },
+            "uni_z": {
+                "port_id": "urn:sdx:port:testoxp.net:TestSw1:40",
+                "tag": {"value": 501, "tag_type": 1},
+            },
+            "dynamic_backup_path": True,
+        }
+        response = await self.api_client.post(
+            f"{self.endpoint}/v1/l2vpn_ptp", json=payload
+        )
+        assert response.status_code == 200
+        posted = requests_mock.call_args.kwargs["json"]
+        assert posted["uni_a"]["tag"] == {"tag_type": "vlan", "value": 300}
+        assert posted["uni_z"]["tag"] == {"tag_type": "vlan", "value": 501}
 
     @patch("requests.get")
     async def test_get_l2vpn_api(self, req_get_mock):

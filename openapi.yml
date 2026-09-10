@@ -335,6 +335,11 @@ components:
           pattern: '^urn:sdx:port:[A-Za-z0-9_,./-]*:[A-Za-z0-9_.,/-]*:[A-Za-z0-9_.,/-]*$'
         vlan:
           type: string
+          description: >-
+            VLAN for the endpoint. Accepts a single VLAN ID ("100"), a range
+            ("1:100"), "untagged", "all", or "any". When "any" is used the SDX
+            Controller chooses an available VLAN from the port's advertised
+            vlan_range.
           pattern: '^(any|untagged|all|[0-9]+:[0-9]+|[0-9]+)$'
       additionalProperties: false
 
