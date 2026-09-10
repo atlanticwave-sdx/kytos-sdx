@@ -479,9 +479,8 @@ class Main(KytosNApp):  # pylint: disable=R0904
                     {"description": "L2VPN creation failed: check logs"}, 400
                 )
         # all retries exhausted on tag conflict
-        return JSONResponse(
-            {"description": "L2VPN creation failed: no VLAN available for 'any'"},
-            400,
+        raise HTTPException(
+            400, detail="L2VPN creation failed: no VLAN available for 'any'"
         )
 
     @rest("l2vpn/1.0", methods=["GET"])
