@@ -12,7 +12,7 @@ General Information
 
 Added
 =====
-- Added support for VLAN ``"any"``: when an L2VPN endpoint requests ``vlan="any"``, the SDX Controller chooses an available VLAN from the port's advertised ``vlan_range`` (from the converted topology), validating availability via the Kytos core Interface. Each endpoint is resolved independently.
+- Added support for VLAN ``"any"``: when an L2VPN endpoint requests ``vlan="any"``, the SDX Controller chooses an available VLAN from the port's advertised ``vlan_range`` (from the converted topology), validating availability via the Kytos core Interface. Each endpoint is resolved independently. On mef_eline tag conflicts the selection is retried with randomized VLAN reselection to avoid concurrent requests colliding on the same VLAN.
 
 Changed
 =======

@@ -31,10 +31,10 @@ in-memory Kytos core `Interface` object through
 [`is_tag_available()`](https://github.com/kytos-ng/kytos/blob/master/kytos/core/interface.py),
 the read-only counterpart of
 [`use_tags()`](https://github.com/kytos-ng/kytos/blob/master/kytos/core/interface.py#L350).
-The first VLAN that is both in range and available (scanning from the lowest) is
-selected, embedded into the EVC request as a concrete value, and handed to
-mef_eline, which performs the actual, authoritative tag reservation when it
-creates the circuit.
+The first VLAN that is both in range and available (scanning from the lowest, or
+in shuffled order on retry — see *Concurrency* below) is selected, embedded into
+the EVC request as a concrete value, and handed to mef_eline, which performs the
+actual, authoritative tag reservation when it creates the circuit.
 
 ### Why check-only (and not reserve) in this NApp
 
@@ -52,18 +52,44 @@ That window is closed with a bounded retry: if mef_eline rejects the POST becaus
 the tag is no longer available, the NApp excludes the failed VLAN, re-resolves
 the `"any"` endpoint(s), and retries.
 
+### Concurrency: avoiding a thundering herd
+
+The REST handlers are synchronous and Starlette runs them in a threadpool, so two
+SDX `"any"` requests can run in parallel, and there is no SDX-side allocation
+queue. The actual reservation is serialized by mef_eline (`use_tags(...,
+use_lock=True)`), so per collision round exactly one request wins. The remaining
+risk is that, with lowest-first selection, N concurrent `"any"` requests on the
+same port all converge on the *same* lowest free VLAN and collide round after
+round (a "thundering herd"), which for N greater than `MAX_VLAN_RETRIES` can
+exhaust retries and fail spuriously.
+
+The mitigation is to randomize *in VLAN space* rather than back off *in time*
+(time backoff would not stop everyone from re-picking the same lowest VLAN).
+Selection is therefore a **hybrid**: the first attempt is deterministic
+(lowest-first, keeping the happy path and tests simple); on **retry** the
+candidate order is shuffled, so concurrent losers spread across the free VLANs
+and collision probability per round drops to about (concurrent requests / free
+VLANs). A process-local lock serializing `"any"` allocations would remove the
+self-collision entirely but adds a bottleneck and still would not cover non-SDX
+reservers; it is left as a future option since `"any"` contention is expected to
+be rare.
+
 ## Design decisions
 
 - **Validation model:** check-only via `Interface.is_tag_available()`; mef_eline
   performs the real reservation on EVC creation.
-- **Selection order:** lowest available VLAN first (deterministic, easy to test).
+- **Selection order:** hybrid — lowest available VLAN first on the initial
+  attempt (deterministic, easy to test); randomized (shuffled) on retry to avoid
+  a thundering herd of concurrent `"any"` requests re-converging on the same
+  lowest free VLAN.
 - **Scope:** every request path that parses endpoint VLANs — `create_l2vpn`
   (`l2vpn/1.0` POST), `update_l2vpn` (`l2vpn/1.0/{id}` PATCH), and
   `create_l2vpn_ptp` (`v1/l2vpn_ptp` POST).
 - **Both endpoints `"any"`:** each endpoint is resolved independently against its
   own port's advertised range.
 - **TOCTOU:** bounded retry (default 3 attempts) around resolve + mef_eline POST,
-  excluding VLANs that mef_eline rejected as unavailable.
+  excluding VLANs that mef_eline rejected as unavailable, with randomized
+  selection on retry.
 
 ## Data model relied upon
 
@@ -82,7 +108,7 @@ whose `id == port_id`; return its `services["l2vpn-ptp"]["vlan_range"]` or `None
 when the port or the `l2vpn-ptp` service is absent. Normalize a flat
 `[start, end]` into `[[start, end]]` so callers always get a list of ranges.
 
-### 2. `choose_available_vlan(kytos_id, port_id, exclude=())`
+### 2. `choose_available_vlan(kytos_id, port_id, exclude=(), randomize=False)`
 Returns `(vlan_int, None)` on success or `(None, msg)` on failure:
 
 ```
@@ -90,12 +116,13 @@ vlan_range = self._get_port_vlan_range(port_id)
     -> if falsy (None or []): return None, "No l2vpn-ptp vlan_range available for port {port_id}"
 iface = self.controller.get_interface_by_id(kytos_id)
     -> if None: return None, "Interface not found for {port_id}"
-for [start, end] in vlan_range:            # ascending
-    for vlan in range(start, end + 1):
-        if vlan in exclude:
-            continue
-        if iface.is_tag_available(vlan):
-            return vlan, None
+candidates = [v for [start, end] in vlan_range
+                for v in range(start, end + 1) if v not in exclude]  # ascending
+if randomize:
+    random.shuffle(candidates)             # spread concurrent choosers (retry)
+for vlan in candidates:
+    if iface.is_tag_available(vlan):
+        return vlan, None
 return None, "No VLAN available for 'any' on port {port_id}"
 ```
 
@@ -115,12 +142,14 @@ before reaching it) and update the comment: `"any"` is resolved by the caller vi
 `choose_available_vlan` using port context; reaching `parse_vlan` with `"any"`
 means the port context was missing.
 
-### 6. Bounded retry (TOCTOU)
+### 6. Bounded retry (TOCTOU) with randomized reselection
 In `create_l2vpn` and `create_l2vpn_ptp`, wrap resolve + mef_eline POST in a loop
 (<= 3 attempts). Track which endpoints were `"any"` and the VLANs tried per
 endpoint; if mef_eline rejects the POST because a tag is unavailable, add the
-tried VLAN(s) to the per-endpoint `exclude` set, re-resolve, and retry. Any other
-failure fails immediately, as today.
+tried VLAN(s) to the per-endpoint `exclude` set, re-resolve, and retry. The
+re-resolve passes `randomize=(attempt > 0)`, so retries shuffle the candidate
+order (see *Concurrency* above) while the first attempt stays deterministic. Any
+other failure fails immediately, as today.
 
 The conflict is detected from the mef_eline 400 body, which looks like:
 
